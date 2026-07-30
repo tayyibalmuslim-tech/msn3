@@ -203,6 +203,24 @@
   }
   .stat-card .v{ font-size: 20px; font-weight: 700; }
   .stat-card .l{ font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* مؤشر المزامنة */
+  .sync-status{
+    display:flex; align-items:center; gap:6px;
+    font-size: 11px; color: var(--text-muted);
+    margin-top: 6px;
+  }
+  .sync-dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--text-muted);
+    transition: background .3s;
+  }
+  .sync-status.connected .sync-dot{ background: var(--green); }
+  .sync-status.connected{ color: var(--green); }
+  .sync-status.error .sync-dot{ background: var(--red); }
+  .sync-status.error{ color: var(--red); }
+  .sync-status.syncing .sync-dot{ background: var(--amber); animation: pulse 1s infinite; }
+  .sync-status.syncing{ color: var(--amber); }
 </style>
 </head>
 <body>
@@ -210,6 +228,10 @@
 <header>
   <h1>📊 نظام متابعة الإنتاج</h1>
   <p>طيب المسلم — تتبع أداء العمال بالمرحلة</p>
+  <div id="sync-status" class="sync-status">
+    <span class="sync-dot"></span>
+    <span id="sync-status-text">بيتصل...</span>
+  </div>
 </header>
 
 <nav>
@@ -228,7 +250,83 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+
 <script>
+// ============ إعداد Firebase ============
+const firebaseConfig = {
+  apiKey: "AIzaSyD8jxpVrvicStETloL8tk5s865dmNatIqE",
+  authDomain: "mazen-productivity-bab1c.firebaseapp.com",
+  projectId: "mazen-productivity-bab1c",
+  storageBucket: "mazen-productivity-bab1c.firebasestorage.app",
+  messagingSenderId: "388570583199",
+  appId: "1:388570583199:web:468f235b2481a15a2252aa",
+  databaseURL: "https://mazen-productivity-bab1c-default-rtdb.firebaseio.com"
+};
+
+let firebaseApp = null;
+let dbRef = null;
+let isRemoteUpdate = false; // فلاج لمنع حلقة لا نهائية (لما نستقبل تحديث من فايربيز منقعدش نبعته تاني)
+let saveDebounceTimer = null;
+
+function setSyncStatus(state, text){
+  const el = document.getElementById('sync-status');
+  const textEl = document.getElementById('sync-status-text');
+  if(!el) return;
+  el.className = 'sync-status ' + state;
+  textEl.textContent = text;
+}
+
+function initFirebaseSync(){
+  try{
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    dbRef = database.ref('production_tracker_data');
+
+    setSyncStatus('syncing', 'بيتصل...');
+
+    // مراقبة حالة الاتصال بالإنترنت مع فايربيز
+    database.ref('.info/connected').on('value', (snap)=>{
+      if(snap.val() === true){
+        setSyncStatus('connected', 'متصل ومتزامن');
+      } else {
+        setSyncStatus('error', 'غير متصل - بيشتغل محلياً');
+      }
+    });
+
+    // استقبال أي تحديث من فايربيز (من أي جهاز تاني أو من التحميل الأول)
+    dbRef.on('value', (snapshot)=>{
+      const remoteData = snapshot.val();
+      if(remoteData){
+        isRemoteUpdate = true;
+        DB = remoteData;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+        renderAll();
+        isRemoteUpdate = false;
+      } else {
+        // مفيش بيانات على فايربيز لسه، نرفع اللي عندنا محلياً كبداية
+        pushToFirebase();
+      }
+    }, (err)=>{
+      console.error('خطأ في المزامنة', err);
+      setSyncStatus('error', 'فشل الاتصال - بيشتغل محلياً');
+    });
+  }catch(e){
+    console.error('فشل تهيئة فايربيز', e);
+    setSyncStatus('error', 'المزامنة غير متاحة');
+  }
+}
+
+function pushToFirebase(){
+  if(!dbRef) return;
+  dbRef.set(DB).catch(err=>{
+    console.error('فشل رفع البيانات', err);
+    setSyncStatus('error', 'فشل رفع التحديث');
+  });
+}
+
 // ============ التخزين (localStorage) ============
 const STORAGE_KEY = 'production_tracker_data_v1';
 
@@ -246,6 +344,11 @@ function saveData(){
   }catch(e){
     console.error('خطأ في الحفظ', e);
     showToast('⚠️ فشل الحفظ - المساحة ممتلئة؟');
+  }
+  // نرفع لفايربيز، إلا لو الحفظ ده جاي أصلاً من تحديث استلمناه من فايربيز (منقعش)
+  if(!isRemoteUpdate){
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(pushToFirebase, 400);
   }
 }
 
@@ -268,6 +371,7 @@ let activeSession = null; // { modelId, stageName, employeeId, startTime, pieces
 let liveTimerInterval = null;
 let tempStages = []; // المراحل المؤقتة أثناء إنشاء/تعديل موديل
 let editingModelId = null; // null = وضع إضافة موديل جديد، غير كده = بنعدل موديل موجود
+let editingStageIndex = null; // null = وضع إضافة مرحلة، رقم = بنعدل مرحلة موجودة في tempStages
 
 // ============ أدوات مساعدة ============
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -310,6 +414,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 });
 
 renderAll();
+initFirebaseSync();
 
 // ============ صفحة الموظفين ============
 function renderEmployeesPage(){
@@ -427,8 +532,8 @@ function renderModelsPage(){
         <input type="number" id="stage-units-input" placeholder="عدد القطع/قطعة" value="1" min="0.1" step="0.1" style="margin-bottom:0; flex:0 0 110px;" />
         <button class="btn ghost" id="add-stage-btn" style="flex:0 0 auto; padding:10px 16px;">➕</button>
       </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">
-        "عدد القطع/قطعة": كام وحدة من المرحلة دي لازمة للقطعة النهائية الواحدة. مثال: سروال فيه 4 جيوب → اكتب 4.
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;" id="stage-hint">
+        "عدد القطع/قطعة": كام وحدة من المرحلة دي لازمة للقطعة النهائية الواحدة. مثال: سروال فيه 4 جيوب → اكتب 4. اضغط على أي مرحلة في القائمة تحت عشان تعدلها.
       </div>
       <div id="temp-stages-list"></div>
       <div class="row" style="margin-top:10px;">
@@ -458,6 +563,7 @@ function renderModelsPage(){
     document.getElementById('model-cancel-btn').addEventListener('click', ()=>{
       editingModelId = null;
       tempStages = [];
+      editingStageIndex = null;
       renderModelsPage();
     });
   }
@@ -512,15 +618,38 @@ function renderTempStages(){
     return;
   }
   el.innerHTML = tempStages.map((s,i) => `
-    <div class="list-item">
-      <div class="info">
+    <div class="list-item ${editingStageIndex===i ? 'editing-stage' : ''}" style="${editingStageIndex===i ? 'border-color:var(--accent);' : ''}">
+      <div class="info" style="cursor:pointer;" onclick="editTempStage(${i})">
         <div class="name">${i+1}. ${escapeHtml(s.name)} <span class="badge green">×${s.unitsPerPiece}</span></div>
       </div>
       <div class="actions">
+        <button class="icon-btn" onclick="editTempStage(${i})">✏️</button>
         <button class="icon-btn del" onclick="removeTempStage(${i})">🗑️</button>
       </div>
     </div>
   `).join('');
+}
+
+function editTempStage(i){
+  const stage = tempStages[i];
+  if(!stage) return;
+  editingStageIndex = i;
+  document.getElementById('stage-name-input').value = stage.name;
+  document.getElementById('stage-units-input').value = stage.unitsPerPiece;
+  const addBtn = document.getElementById('add-stage-btn');
+  addBtn.textContent = '💾';
+  document.getElementById('stage-hint').innerHTML = `✏️ بتعدل مرحلة "${escapeHtml(stage.name)}" — احفظ التعديل أو <a href="#" onclick="cancelEditTempStage();return false;" style="color:var(--accent);">إلغاء</a>`;
+  document.getElementById('stage-name-input').focus();
+  renderTempStages();
+}
+
+function cancelEditTempStage(){
+  editingStageIndex = null;
+  document.getElementById('stage-name-input').value = '';
+  document.getElementById('stage-units-input').value = '1';
+  document.getElementById('add-stage-btn').textContent = '➕';
+  document.getElementById('stage-hint').innerHTML = '"عدد القطع/قطعة": كام وحدة من المرحلة دي لازمة للقطعة النهائية الواحدة. مثال: سروال فيه 4 جيوب → اكتب 4. اضغط على أي مرحلة في القائمة تحت عشان تعدلها.';
+  renderTempStages();
 }
 
 function addTempStage(){
@@ -530,6 +659,14 @@ function addTempStage(){
   const units = parseFloat(unitsInput.value);
   if(!val){ showToast('⚠️ اكتب اسم المرحلة'); return; }
   if(!units || units <= 0){ showToast('⚠️ اكتب عدد قطع صحيح للمرحلة'); return; }
+
+  if(editingStageIndex !== null){
+    tempStages[editingStageIndex] = { name: val, unitsPerPiece: units };
+    showToast('✅ تم تعديل المرحلة');
+    cancelEditTempStage();
+    return;
+  }
+
   tempStages.push({ name: val, unitsPerPiece: units });
   nameInput.value = '';
   unitsInput.value = '1';
@@ -538,6 +675,7 @@ function addTempStage(){
 }
 
 function removeTempStage(i){
+  if(editingStageIndex === i) cancelEditTempStage();
   tempStages.splice(i,1);
   renderTempStages();
 }
@@ -547,6 +685,7 @@ function startEditModel(id){
   if(!model) return;
   editingModelId = id;
   tempStages = model.stages.map(migrateStage);
+  editingStageIndex = null;
   renderModelsPage();
   document.getElementById('page-models').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -582,6 +721,7 @@ function saveModel(){
   }
 
   tempStages = [];
+  editingStageIndex = null;
   renderModelsPage();
   renderTrackPage();
 }
