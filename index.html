@@ -251,10 +251,23 @@ function saveData(){
 
 let DB = loadData();
 
+// migration: الموديلات القديمة كانت مراحلها نصوص بسيطة، نحولها لـ objects فيها unitsPerPiece
+(function migrateOldModels(){
+  let changed = false;
+  DB.models.forEach(m=>{
+    m.stages = m.stages.map(s=>{
+      if(typeof s === 'string'){ changed = true; return { name: s, unitsPerPiece: 1 }; }
+      return s;
+    });
+  });
+  if(changed) saveData();
+})();
+
 // متغيرات الحالة العامة - لازم تتعرف هنا قبل أي استخدام لها في renderAll
 let activeSession = null; // { modelId, stageName, employeeId, startTime, pieces:[timestamps] }
 let liveTimerInterval = null;
-let tempStages = []; // المراحل المؤقتة أثناء إنشاء موديل جديد
+let tempStages = []; // المراحل المؤقتة أثناء إنشاء/تعديل موديل
+let editingModelId = null; // null = وضع إضافة موديل جديد، غير كده = بنعدل موديل موجود
 
 // ============ أدوات مساعدة ============
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -387,26 +400,52 @@ function escapeHtml(str){
 }
 
 // ============ صفحة الموديلات ============
+// هيكل المرحلة: { name: string, unitsPerPiece: number }
+// unitsPerPiece = كام وحدة من المرحلة دي لازمة لقطعة نهائية واحدة (مثال: 4 جيوب لكل سروال)
+
+function migrateStage(s){
+  // دعم الموديلات القديمة اللي كانت المرحلة فيها نص بسيط بدل object
+  if(typeof s === 'string') return { name: s, unitsPerPiece: 1 };
+  return { name: s.name, unitsPerPiece: s.unitsPerPiece || 1 };
+}
+
 function renderModelsPage(){
   const el = document.getElementById('page-models');
+  const isEditing = editingModelId !== null;
+  const editingModel = isEditing ? DB.models.find(m=>m.id===editingModelId) : null;
+
   el.innerHTML = `
     <div class="card">
-      <h3>➕ إضافة موديل جديد</h3>
+      <h3>${isEditing ? '✏️ تعديل موديل: ' + escapeHtml(editingModel.name) : '➕ إضافة موديل جديد'}</h3>
       <label>اسم الموديل</label>
       <input type="text" id="model-name" placeholder="مثال: تيشرت كلاسيك" />
+      <label>عدد قطع الطلبية (اختياري)</label>
+      <input type="number" id="model-total-pieces" placeholder="مثال: 500" min="0" />
       <label>مراحل الإنتاج</label>
-      <div class="row" style="margin-bottom:10px;">
-        <input type="text" id="stage-name-input" placeholder="اسم المرحلة مثال: خياطة الأكمام" style="margin-bottom:0;" />
+      <div class="row" style="margin-bottom:6px; align-items:flex-start;">
+        <input type="text" id="stage-name-input" placeholder="اسم المرحلة مثال: الجيوب" style="margin-bottom:0;" />
+        <input type="number" id="stage-units-input" placeholder="عدد القطع/قطعة" value="1" min="0.1" step="0.1" style="margin-bottom:0; flex:0 0 110px;" />
         <button class="btn ghost" id="add-stage-btn" style="flex:0 0 auto; padding:10px 16px;">➕</button>
       </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">
+        "عدد القطع/قطعة": كام وحدة من المرحلة دي لازمة للقطعة النهائية الواحدة. مثال: سروال فيه 4 جيوب → اكتب 4.
+      </div>
       <div id="temp-stages-list"></div>
-      <button class="btn full green" id="model-save-btn" style="margin-top:10px;">حفظ الموديل</button>
+      <div class="row" style="margin-top:10px;">
+        ${isEditing ? '<button class="btn ghost" id="model-cancel-btn">إلغاء</button>' : ''}
+        <button class="btn full green" id="model-save-btn">${isEditing ? '💾 حفظ التعديلات' : 'حفظ الموديل'}</button>
+      </div>
     </div>
     <div class="card">
       <h3>📦 الموديلات المسجلة (${DB.models.length})</h3>
       <div id="model-list"></div>
     </div>
   `;
+
+  if(isEditing){
+    document.getElementById('model-name').value = editingModel.name;
+    document.getElementById('model-total-pieces').value = editingModel.totalPieces || '';
+  }
 
   renderTempStages();
 
@@ -415,23 +454,54 @@ function renderModelsPage(){
     if(e.key === 'Enter'){ e.preventDefault(); addTempStage(); }
   });
   document.getElementById('model-save-btn').addEventListener('click', saveModel);
+  if(isEditing){
+    document.getElementById('model-cancel-btn').addEventListener('click', ()=>{
+      editingModelId = null;
+      tempStages = [];
+      renderModelsPage();
+    });
+  }
 
   const listEl = document.getElementById('model-list');
   if(DB.models.length === 0){
     listEl.innerHTML = '<div class="empty">لسه معملتش موديلات. ضيف موديل جديد فوق ⬆️</div>';
   } else {
-    listEl.innerHTML = DB.models.map(m => `
+    listEl.innerHTML = DB.models.map(m => {
+      const stages = m.stages.map(migrateStage);
+      const stagesLabel = stages.map(s => `${escapeHtml(s.name)} (×${s.unitsPerPiece})`).join(' ← ');
+      const producedInfo = renderModelProgress(m);
+      return `
       <div class="list-item" style="align-items:flex-start;">
         <div class="info">
-          <div class="name">${escapeHtml(m.name)}</div>
-          <div class="sub">${m.stages.map(s=>escapeHtml(s)).join(' ← ')}</div>
+          <div class="name">${escapeHtml(m.name)} ${m.totalPieces ? `<span class="badge amber">${m.totalPieces} قطعة مطلوبة</span>` : ''}</div>
+          <div class="sub">${stagesLabel}</div>
+          ${producedInfo}
         </div>
         <div class="actions">
+          <button class="icon-btn" onclick="startEditModel('${m.id}')">✏️</button>
           <button class="icon-btn del" onclick="deleteModel('${m.id}')">🗑️</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
+}
+
+function renderModelProgress(m){
+  // بيحسب عدد القطع الفعلي المنتج لكل مرحلة من الجلسات المسجلة، ويوريه كنسبة من "قطع نهائية مكافئة"
+  const stages = m.stages.map(migrateStage);
+  const sessionsForModel = DB.sessions.filter(s=>s.modelId===m.id);
+  if(sessionsForModel.length === 0) return '';
+
+  const rows = stages.map(st=>{
+    const producedUnits = sessionsForModel
+      .filter(s=>s.stageName===st.name)
+      .reduce((a,s)=>a+s.pieceCount,0);
+    const equivalentPieces = st.unitsPerPiece > 0 ? (producedUnits / st.unitsPerPiece) : 0;
+    return `<span style="display:inline-block; margin-left:10px;">${escapeHtml(st.name)}: ${producedUnits} وحدة (≈${equivalentPieces.toFixed(1)} قطعة)</span>`;
+  }).join('');
+
+  return `<div class="sub" style="margin-top:6px; color:var(--text-dim);">📊 الإنتاج الفعلي: ${rows}</div>`;
 }
 
 function renderTempStages(){
@@ -444,7 +514,7 @@ function renderTempStages(){
   el.innerHTML = tempStages.map((s,i) => `
     <div class="list-item">
       <div class="info">
-        <div class="name">${i+1}. ${escapeHtml(s)}</div>
+        <div class="name">${i+1}. ${escapeHtml(s.name)} <span class="badge green">×${s.unitsPerPiece}</span></div>
       </div>
       <div class="actions">
         <button class="icon-btn del" onclick="removeTempStage(${i})">🗑️</button>
@@ -454,12 +524,16 @@ function renderTempStages(){
 }
 
 function addTempStage(){
-  const input = document.getElementById('stage-name-input');
-  const val = input.value.trim();
+  const nameInput = document.getElementById('stage-name-input');
+  const unitsInput = document.getElementById('stage-units-input');
+  const val = nameInput.value.trim();
+  const units = parseFloat(unitsInput.value);
   if(!val){ showToast('⚠️ اكتب اسم المرحلة'); return; }
-  tempStages.push(val);
-  input.value = '';
-  input.focus();
+  if(!units || units <= 0){ showToast('⚠️ اكتب عدد قطع صحيح للمرحلة'); return; }
+  tempStages.push({ name: val, unitsPerPiece: units });
+  nameInput.value = '';
+  unitsInput.value = '1';
+  nameInput.focus();
   renderTempStages();
 }
 
@@ -468,14 +542,45 @@ function removeTempStage(i){
   renderTempStages();
 }
 
+function startEditModel(id){
+  const model = DB.models.find(m=>m.id===id);
+  if(!model) return;
+  editingModelId = id;
+  tempStages = model.stages.map(migrateStage);
+  renderModelsPage();
+  document.getElementById('page-models').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 function saveModel(){
   const nameInput = document.getElementById('model-name');
+  const totalPiecesInput = document.getElementById('model-total-pieces');
   const name = nameInput.value.trim();
+  const totalPieces = totalPiecesInput.value ? parseFloat(totalPiecesInput.value) : null;
+
   if(!name){ showToast('⚠️ اكتب اسم الموديل'); nameInput.focus(); return; }
   if(tempStages.length === 0){ showToast('⚠️ ضيف مرحلة واحدة على الأقل'); return; }
-  DB.models.push({ id: uid(), name, stages: [...tempStages], createdAt: Date.now() });
-  saveData();
-  showToast('✅ تم حفظ موديل ' + name);
+
+  if(editingModelId){
+    const model = DB.models.find(m=>m.id===editingModelId);
+    if(!model){ showToast('⚠️ الموديل ده اتحذف'); editingModelId=null; renderModelsPage(); return; }
+    model.name = name;
+    model.totalPieces = totalPieces;
+    model.stages = tempStages.map(s=>({...s}));
+    saveData();
+    showToast('✅ تم حفظ تعديلات ' + name);
+    editingModelId = null;
+  } else {
+    DB.models.push({
+      id: uid(),
+      name,
+      totalPieces,
+      stages: tempStages.map(s=>({...s})),
+      createdAt: Date.now()
+    });
+    saveData();
+    showToast('✅ تم حفظ موديل ' + name);
+  }
+
   tempStages = [];
   renderModelsPage();
   renderTrackPage();
@@ -488,6 +593,7 @@ function deleteModel(id){
   DB.models = DB.models.filter(m=>m.id!==id);
   saveData();
   showToast('🗑️ تم الحذف');
+  if(editingModelId===id){ editingModelId=null; tempStages=[]; }
   renderModelsPage();
   renderTrackPage();
 }
@@ -542,8 +648,9 @@ function renderTrackPage(){
         return;
       }
       stageSelect.disabled = false;
+      const stages = model.stages.map(migrateStage);
       stageSelect.innerHTML = '<option value="">-- اختر المرحلة --</option>' +
-        model.stages.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+        stages.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} (×${s.unitsPerPiece})</option>`).join('');
     });
 
     document.getElementById('start-session-btn').addEventListener('click', ()=>{
