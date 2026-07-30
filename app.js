@@ -20,6 +20,11 @@ function saveData(){
 
 let DB = loadData();
 
+// متغيرات الحالة العامة - لازم تتعرف هنا قبل أي استخدام لها في renderAll
+let activeSession = null; // { modelId, stageName, employeeId, startTime, pieces:[timestamps] }
+let liveTimerInterval = null;
+let tempStages = []; // المراحل المؤقتة أثناء إنشاء موديل جديد
+
 // ============ أدوات مساعدة ============
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -151,8 +156,6 @@ function escapeHtml(str){
 }
 
 // ============ صفحة الموديلات ============
-let tempStages = []; // المراحل المؤقتة أثناء إنشاء موديل جديد
-
 function renderModelsPage(){
   const el = document.getElementById('page-models');
   el.innerHTML = `
@@ -259,8 +262,6 @@ function deleteModel(id){
 }
 
 // ============ صفحة التتبع (العداد الحي) ============
-let activeSession = null; // { modelId, stageName, employeeId, startTime, pieces:[timestamps], intervalId }
-
 function renderTrackPage(){
   const el = document.getElementById('page-track');
 
@@ -410,7 +411,6 @@ function renderPiecesLogInto(){
   logEl.innerHTML = `<table><tr><th>#</th><th>الوقت</th><th>المدة</th></tr>${rows}</table>`;
 }
 
-let liveTimerInterval = null;
 function startLiveTimer(){
   clearInterval(liveTimerInterval);
   updateLiveDisplay();
