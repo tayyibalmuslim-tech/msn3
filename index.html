@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تتبع الموديلات والمخزون</title>
+<style>
+:root{
+  --ink:#1c1a17;
+  --paper:#f2ede4;
+  --steel:#3d4a52;
+  --steel-dark:#28333a;
+  --brass:#b8863f;
+  --brass-light:#d9ab5f;
+  --thread-red:#a13d2e;
+  --line:#c9beac;
+  --card:#faf7f0;
+  --ok:#3e6b4f;
+  --warn:#a13d2e;
+  --mono: 'Courier New', ui-monospace, monospace;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:-apple-system, 'Segoe UI', Tahoma, sans-serif;
+  min-height:100vh;
+  padding-bottom:80px;
+}
+body::before{
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(60,50,35,.035) 39px, rgba(60,50,35,.035) 40px),
+    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(60,50,35,.035) 39px, rgba(60,50,35,.035) 40px);
+  pointer-events:none;
+  z-index:0;
+}
+.app{position:relative; z-index:1; max-width:1150px; margin:0 auto; padding:20px;}
+
+header.top{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:18px 22px; margin-bottom:20px;
+  background:var(--steel-dark);
+  border-radius:10px;
+  color:var(--paper);
+  box-shadow:0 4px 14px rgba(0,0,0,.18);
+  flex-wrap:wrap; gap:14px;
+}
+header.top .brand{display:flex; align-items:center; gap:12px;}
+header.top .tag{
+  width:34px; height:34px; border-radius:6px;
+  background:var(--brass);
+  display:flex; align-items:center; justify-content:center;
+  font-weight:bold; font-size:18px; color:var(--steel-dark);
+  transform:rotate(-4deg);
+}
+header.top h1{font-size:18px; font-weight:700; letter-spacing:.3px;}
+header.top .sub{font-size:11px; opacity:.65; margin-top:2px;}
+header.top .stats{display:flex; gap:20px; font-family:var(--mono);}
+header.top .stats div{text-align:center;}
+header.top .stats .num{font-size:18px; font-weight:bold; color:var(--brass-light);}
+header.top .stats .lbl{font-size:10px; opacity:.6;}
+
+nav.tabs{
+  display:flex; gap:6px; margin-bottom:22px; flex-wrap:wrap;
+  border-bottom:2px solid var(--line);
+}
+nav.tabs button{
+  padding:10px 16px;
+  background:transparent; border:none; border-bottom:3px solid transparent;
+  color:var(--ink); opacity:.55; font-size:14px; font-weight:600;
+  cursor:pointer; transition:all .15s; font-family:inherit;
+}
+nav.tabs button:hover{opacity:.85;}
+nav.tabs button.active{opacity:1; border-bottom-color:var(--brass); color:var(--steel-dark);}
+nav.tabs button .count{
+  display:inline-block; margin-inline-start:6px;
+  background:var(--line); color:var(--ink);
+  border-radius:10px; padding:1px 7px; font-size:11px; font-family:var(--mono);
+}
+
+section.view{display:none;}
+section.view.active{display:block; animation:fadeIn .25s ease;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+.panel{
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  padding:20px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.04);
+}
+.panel h2{
+  font-size:16px; margin-bottom:14px; color:var(--steel-dark);
+  display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap;
+}
+.panel h2 .title-txt{display:flex; align-items:center; gap:8px;}
+
+.form-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;}
+.field{display:flex; flex-direction:column; gap:5px;}
+.field label{font-size:12px; font-weight:600; color:var(--steel);}
+.field input, .field select{
+  padding:9px 11px; border:1.5px solid var(--line); border-radius:7px;
+  font-size:14px; background:#fff; color:var(--ink); font-family:inherit;
+}
+.field input:focus, .field select:focus{outline:none; border-color:var(--brass);}
+.field .hint{font-size:11px; color:#8a8070;}
+
+button.btn{
+  padding:10px 18px; border:none; border-radius:7px;
+  background:var(--steel-dark); color:#fff; font-size:13px; font-weight:700;
+  cursor:pointer; transition:transform .1s, background .15s; font-family:inherit;
+}
+button.btn:hover{background:var(--steel);}
+button.btn:active{transform:scale(.97);}
+button.btn.brass{background:var(--brass);}
+button.btn.brass:hover{background:var(--brass-light);}
+button.btn.ghost{background:transparent; color:var(--steel-dark); border:1.5px solid var(--line);}
+button.btn.ghost:hover{border-color:var(--steel);}
+button.btn.danger{background:var(--thread-red);}
+button.btn.small{padding:6px 12px; font-size:12px;}
+button.btn.full{width:100%;}
+
+.emp-row, .stage-row{
+  display:grid; gap:10px; align-items:end; margin-bottom:10px;
+  padding:10px; background:#fff; border-radius:8px; border:1px solid var(--line);
+}
+.emp-row{grid-template-columns:1.4fr 1fr 1fr auto;}
+
+.color-card{
+  padding:14px; background:#fff; border-radius:8px; border:1.5px solid var(--line); margin-bottom:12px;
+}
+.color-card .color-top{display:grid; grid-template-columns:1fr 90px auto; gap:10px; align-items:end; margin-bottom:10px;}
+.size-row{display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end; margin-bottom:8px;}
+.size-row select, .size-row input{
+  padding:8px 10px; border:1.5px solid var(--line); border-radius:6px; font-size:13px; font-family:inherit;
+}
+.color-card .size-total{font-size:11px; color:#8a8070; margin-top:4px;}
+.swatch{
+  width:20px; height:20px; border-radius:4px; border:1.5px solid var(--line);
+  display:inline-block; vertical-align:middle; margin-inline-end:6px;
+}
+
+.model-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px;}
+.model-card{
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  overflow:hidden; cursor:pointer; transition:box-shadow .15s, transform .1s;
+}
+.model-card:hover{box-shadow:0 6px 16px rgba(0,0,0,.1); transform:translateY(-2px);}
+.model-card .head{
+  background:var(--steel-dark); color:#fff; padding:14px 16px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.model-card .head h3{font-size:15px;}
+.model-card .head .price{font-family:var(--mono); color:var(--brass-light); font-size:13px;}
+.model-card .body{padding:14px 16px;}
+.model-card .colors{display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;}
+.color-chip{
+  font-size:11px; padding:3px 9px; border-radius:12px;
+  background:#fff; border:1px solid var(--line); display:flex; align-items:center; gap:5px;
+}
+.progress-track{height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:8px 0 4px;}
+.progress-fill{height:100%; background:var(--brass); border-radius:4px; transition:width .3s;}
+.model-card .meta{display:flex; justify-content:space-between; font-size:12px; color:#7a7263; margin-top:6px;}
+.stage-dots{display:flex; gap:4px; margin-top:10px;}
+.stage-dot{flex:1; height:5px; border-radius:3px; background:var(--line);}
+.stage-dot.done{background:var(--ok);}
+.stage-dot.active{background:var(--brass);}
+
+.model-detail-header{
+  display:flex; justify-content:space-between; align-items:flex-start;
+  margin-bottom:18px; flex-wrap:wrap; gap:12px;
+}
+.model-detail-header h2{font-size:22px; color:var(--steel-dark);}
+.model-detail-header .price-tag{
+  font-family:var(--mono); background:var(--steel-dark); color:var(--brass-light);
+  padding:6px 14px; border-radius:6px; font-size:14px; font-weight:bold;
+}
+.back-btn{
+  display:inline-flex; align-items:center; gap:6px;
+  color:var(--steel); font-size:13px; cursor:pointer; margin-bottom:14px; font-weight:600;
+}
+.back-btn:hover{color:var(--brass);}
+
+.stage-tabs{display:flex; gap:4px; overflow-x:auto; margin-bottom:16px; padding-bottom:4px;}
+.stage-tab{
+  padding:8px 14px; white-space:nowrap;
+  background:#fff; border:1px solid var(--line); border-radius:7px;
+  font-size:12px; font-weight:600; cursor:pointer; color:var(--ink); opacity:.6;
+}
+.stage-tab.active{opacity:1; background:var(--steel-dark); color:#fff; border-color:var(--steel-dark);}
+.stage-tab.done-marker::after{content:' ✓'; color:var(--ok);}
+
+table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
+table.data-table th{
+  text-align:right; padding:9px 10px; background:var(--steel-dark); color:#fff;
+  font-size:11px; font-weight:700;
+}
+table.data-table th:first-child{border-radius:6px 0 0 0;}
+table.data-table th:last-child{border-radius:0 6px 0 0;}
+table.data-table td{padding:8px 10px; border-bottom:1px solid var(--line);}
+table.data-table tbody tr:hover{background:rgba(184,134,63,.06);}
+table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px solid var(--steel-dark);}
+
+.empty-state{text-align:center; padding:40px 20px; color:#9a9080;}
+.empty-state .icon{font-size:32px; margin-bottom:10px;}
+.empty-state p{font-size:13px;}
+
+.badge{display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:700;}
+.badge.ok{background:#e2ede5; color:var(--ok);}
+.badge.warn{background:#f3e2de; color:var(--warn);}
+.badge.pending{background:#ece7dc; color:#8a8070;}
+.badge.internal{background:#dfe7ea; color:var(--steel-dark);}
+.badge.external{background:#efe1cf; color:#8a5a20;}
+
+.cost-summary{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px; margin-top:14px;}
+.cost-item{background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; text-align:center;}
+.cost-item .lbl{font-size:11px; color:#8a8070; margin-bottom:6px;}
+.cost-item .val{font-size:19px; font-weight:bold; font-family:var(--mono); color:var(--steel-dark);}
+.cost-item.profit .val{color:var(--ok);}
+.cost-item.profit.negative .val{color:var(--warn);}
+
+.cost-breakdown{margin-top:14px;}
+.cost-breakdown .line{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dashed var(--line); font-size:13px;}
+.cost-breakdown .line.total{font-weight:bold; border-bottom:none; border-top:2px solid var(--steel-dark); margin-top:4px; padding-top:10px;}
+
+.modal-overlay{
+  display:none; position:fixed; inset:0; background:rgba(28,26,23,.55);
+  z-index:100; align-items:center; justify-content:center; padding:20px; overflow-y:auto;
+}
+.modal-overlay.active{display:flex;}
+.modal{
+  background:var(--paper); border-radius:12px; max-width:640px; width:100%;
+  max-height:88vh; overflow-y:auto; padding:24px; box-shadow:0 20px 50px rgba(0,0,0,.3);
+}
+.modal h3{font-size:17px; margin-bottom:16px; color:var(--steel-dark);}
+.modal-close{float:left; background:transparent; border:none; font-size:20px; cursor:pointer; color:var(--steel);}
+
+.fab{
+  position:fixed; bottom:24px; left:24px; z-index:50;
+  width:56px; height:56px; border-radius:50%;
+  background:var(--brass); color:#fff; border:none;
+  font-size:26px; cursor:pointer; box-shadow:0 6px 18px rgba(184,134,63,.4);
+  display:flex; align-items:center; justify-content:center;
+}
+.fab:hover{background:var(--brass-light); transform:scale(1.05);}
+
+.toast{
+  position:fixed; bottom:24px; right:24px; z-index:200;
+  background:var(--steel-dark); color:#fff; padding:12px 20px; border-radius:8px;
+  font-size:13px; box-shadow:0 6px 16px rgba(0,0,0,.2);
+  opacity:0; transform:translateY(10px); transition:all .25s; pointer-events:none;
+}
+.toast.show{opacity:1; transform:translateY(0);}
+
+.row-actions{display:flex; gap:6px;}
+.icon-btn{background:transparent; border:none; cursor:pointer; font-size:15px; padding:4px 6px; border-radius:5px;}
+.icon-btn:hover{background:rgba(0,0,0,.06);}
+
+.section-divider{
+  display:flex; align-items:center; gap:10px; margin:20px 0 12px;
+  font-size:12px; font-weight:700; color:var(--steel); text-transform:uppercase; letter-spacing:.5px;
+}
+.section-divider::after{content:''; flex:1; height:1px; background:var(--line);}
+
+.rate-card{
+  background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px;
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;
+}
+.rate-card .dept-name{font-weight:700; font-size:14px;}
+.rate-card .dept-pct{font-size:11px; color:#8a8070;}
+.rate-card .rate-val{font-family:var(--mono); font-size:18px; font-weight:bold; color:var(--brass);}
+.rate-card .rate-lbl{font-size:10px; color:#8a8070;}
+
+.dept-stage-box{
+  border:1.5px solid var(--line); border-radius:8px; padding:12px; background:#fff;
+}
+.dept-stage-box.internal{border-color:var(--steel);}
+.dept-stage-box.external{border-color:var(--brass);}
+
+@media (max-width:640px){
+  header.top{flex-direction:column; align-items:flex-start;}
+  header.top .stats{width:100%; justify-content:space-around;}
+  .color-row, .emp-row{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="tag">%</div>
+      <div>
+        <h1>تتبع الموديلات والمخزون</h1>
+        <div class="sub">مصنع الملابس</div>
+      </div>
+    </div>
+    <div class="stats">
+      <div><div class="num" id="statModels">0</div><div class="lbl">موديل نشط</div></div>
+      <div><div class="num" id="statPieces">0</div><div class="lbl">قطعة قيد التصنيع</div></div>
+      <div><div class="num" id="statProfit">0</div><div class="lbl">صافي ربح متوقع</div></div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="models" onclick="switchMainTab('models')">الموديلات <span class="count" id="tabCountModels">0</span></button>
+    <button class="tab-btn" data-tab="settings" onclick="switchMainTab('settings')">⚙️ إعدادات المصنع والتكاليف</button>
+  </nav>
+
+  <section class="view active" id="view-models">
+    <div id="modelGrid" class="model-grid"></div>
+  </section>
+
+  <section class="view" id="view-settings"></section>
+
+  <section class="view" id="view-detail"></section>
+
+  <button class="fab" id="fabAdd" title="موديل جديد">+</button>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   الحالة والتخزين
+============================================================ */
+const STORAGE_KEY = 'factory_tracker_v2';
+let state = {
+  models: [],
+  factory: {
+    rent: 0,
+    electricity: 0,
+    workHoursPerDay: 9,
+    workDaysPerMonth: 26,
+    employees: [] // {id, name, dept, salary}
+  }
+};
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) state = JSON.parse(raw);
+    if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
+    if(!state.factory.employees) state.factory.employees = [];
+  }catch(e){ console.error('فشل تحميل البيانات', e); }
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function uid(){ return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ============================================================
+   ثوابت الأقسام
+   3 أقسام داخلية بنسب من (إيجار+كهرباء)، زائد أقسام خارجية بتكلفة يدوية
+============================================================ */
+const SIZES = ['S','M','L','XL','2XL','3XL','4XL','5XL'];
+
+const INTERNAL_DEPTS = [
+  {key:'cutting',  label:'المقص',            pct:0.35},
+  {key:'sewing',   label:'الخياطة',          pct:0.40},
+  {key:'ambag',    label:'امباج (تشطيب+مكوة+تكيس)', pct:0.25},
+];
+const EXTERNAL_STAGES = [
+  {key:'tatreez', label:'تطريز/طباعة'},
+  {key:'buttons', label:'أزرار'},
+];
+const ALL_STAGES = [...INTERNAL_DEPTS.map(d=>({key:d.key,label:d.label,internal:true})), ...EXTERNAL_STAGES.map(s=>({key:s.key,label:s.label,internal:false}))];
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function fmt(n){ n = Number(n)||0; return n.toLocaleString('ar-EG', {maximumFractionDigits:2}); }
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+/* ============================================================
+   حساب تكلفة الساعة لكل قسم داخلي
+============================================================ */
+function getMonthlyHours(){
+  const h = Number(state.factory.workHoursPerDay)||9;
+  const d = Number(state.factory.workDaysPerMonth)||26;
+  return h*d;
+}
+
+function getDeptHourlyRate(deptKey){
+  const dept = INTERNAL_DEPTS.find(d=>d.key===deptKey);
+  if(!dept) return 0;
+  const fixedShare = ((Number(state.factory.rent)||0) + (Number(state.factory.electricity)||0)) * dept.pct;
+  const salariesShare = state.factory.employees
+    .filter(e=>e.dept===deptKey)
+    .reduce((s,e)=>s+(Number(e.salary)||0), 0);
+  const monthlyHours = getMonthlyHours();
+  if(monthlyHours<=0) return 0;
+  return (fixedShare + salariesShare) / monthlyHours;
+}
+
+function getDeptMonthlyCost(deptKey){
+  const dept = INTERNAL_DEPTS.find(d=>d.key===deptKey);
+  if(!dept) return {fixedShare:0, salariesShare:0, total:0};
+  const fixedShare = ((Number(state.factory.rent)||0) + (Number(state.factory.electricity)||0)) * dept.pct;
+  const salariesShare = state.factory.employees
+    .filter(e=>e.dept===deptKey)
+    .reduce((s,e)=>s+(Number(e.salary)||0), 0);
+  return {fixedShare, salariesShare, total:fixedShare+salariesShare};
+}
+
+/* ============================================================
+   عرض قائمة الموديلات
+============================================================ */
+function switchMainTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  currentModelId = null;
+  if(tab==='models'){
+    document.getElementById('view-models').classList.add('active');
+    renderModelGrid();
+  } else {
+    document.getElementById('view-settings').classList.add('active');
+    renderSettingsView();
+  }
+}
+
+function renderModelGrid(){
+  const grid = document.getElementById('modelGrid');
+  document.getElementById('tabCountModels').textContent = state.models.length;
+  document.getElementById('statModels').textContent = state.models.length;
+
+  let totalPiecesInProgress = 0;
+  let totalProfit = 0;
+  state.models.forEach(m=>{
+    const cut = getTotalCutQty(m);
+    totalPiecesInProgress += cut;
+    const c = calcModelCost(m);
+    totalProfit += c.profit;
+  });
+  document.getElementById('statPieces').textContent = fmt(totalPiecesInProgress);
+  document.getElementById('statProfit').textContent = fmt(totalProfit) + ' ج';
+
+  if(state.models.length === 0){
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+      <div class="icon">🧵</div>
+      <p>مفيش موديلات لسه. دوس على + عشان تضيف أول موديل.</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = state.models.map(m=>{
+    const receivedTotal = m.colors.reduce((s,c)=>s+(Number(c.receivedBolts)||0),0);
+    const expectedTotal = m.colors.reduce((s,c)=>s+(Number(c.expectedBolts)||0),0);
+    const cutQty = getTotalCutQty(m);
+    const pct = m.expectedTotal ? Math.min(100, Math.round(cutQty/m.expectedTotal*100)) : 0;
+
+    const stagesStatus = (m.stagesPlanned||[]).map(sp=>{
+      const logs = (m.stageLogs && m.stageLogs[sp.key]) || [];
+      return logs.length>0 ? 'done' : 'active';
+    });
+
+    return `<div class="model-card" onclick="openModelDetail('${m.id}')">
+      <div class="head">
+        <h3>${escapeHtml(m.name)}</h3>
+        <div class="price">${fmt(m.sellPrice)} ج</div>
+      </div>
+      <div class="body">
+        <div class="colors">
+          ${m.colors.map(c=>`<span class="color-chip"><span class="swatch" style="background:${c.hex}"></span>${escapeHtml(c.name)}</span>`).join('')}
+        </div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="meta">
+          <span>القص: ${fmt(cutQty)} / ${fmt(m.expectedTotal)} قطعة</span>
+          <span>استلام: ${fmt(receivedTotal)}/${fmt(expectedTotal)} ثوب</span>
+        </div>
+        <div class="stage-dots">
+          ${stagesStatus.map(s=>`<div class="stage-dot ${s}"></div>`).join('') || '<div class="stage-dot"></div>'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getTotalCutQty(m){
+  return (m.cutParts||[]).reduce((s,r)=>s+(Number(r.qty)||0),0);
+}
+
+/* ============================================================
+   حساب التكلفة والربح لكل موديل
+   لكل مرحلة مخططة في الموديل:
+     - لو داخلية: التكلفة المتوقعة = الوقت المتوقع (ساعة) × تكلفة ساعة القسم (بتُحسب من الإعدادات الحالية)
+     - لو خارجية: التكلفة المتوقعة = اللي كتبها المستخدم يدوي
+   لو فيه سجلات فعلية للمرحلة (stageLogs) بتحل محل التقدير في حساب التكلفة الكلية.
+============================================================ */
+function calcModelCost(m){
+  const cutQty = getTotalCutQty(m);
+  const baseUnit = cutQty > 0 ? cutQty : (m.expectedTotal || 0);
+
+  let totalCost = 0;
+  let stageDetails = [];
+
+  (m.stagesPlanned||[]).forEach(sp=>{
+    const isInternal = INTERNAL_DEPTS.some(d=>d.key===sp.key);
+    const logs = (m.stageLogs && m.stageLogs[sp.key]) || [];
+    const hasLogs = logs.length>0;
+    const actualSum = logs.reduce((s,l)=>s+(Number(l.cost)||0),0);
+    const actualTimeSum = logs.reduce((s,l)=>s+(Number(l.time)||0),0);
+
+    let plannedCost = 0;
+    let hourlyRate = null;
+    if(isInternal){
+      hourlyRate = getDeptHourlyRate(sp.key);
+      plannedCost = hourlyRate * (Number(sp.expectedTime)||0);
+    } else {
+      plannedCost = Number(sp.expectedCost)||0;
+    }
+
+    const usedCost = hasLogs ? actualSum : plannedCost;
+    totalCost += usedCost;
+
+    stageDetails.push({
+      key:sp.key, label:sp.label, internal:isInternal,
+      expectedTime:sp.expectedTime, hourlyRate,
+      plannedCost, actualCost:actualSum, actualTime:actualTimeSum,
+      hasLogs, usedCost
+    });
+  });
+
+  const revenue = (m.expectedTotal||0) * (Number(m.sellPrice)||0);
+  const profit = revenue - totalCost;
+  const costPerUnit = baseUnit > 0 ? totalCost/baseUnit : 0;
+  const profitPerUnit = (Number(m.sellPrice)||0) - costPerUnit;
+
+  return { revenue, totalCost, profit, costPerUnit, profitPerUnit, stageDetails };
+}
+
+/* ============================================================
+   إعدادات المصنع
+============================================================ */
+function renderSettingsView(){
+  const f = state.factory;
+  const monthlyHours = getMonthlyHours();
+
+  document.getElementById('view-settings').innerHTML = `
+    <div class="panel">
+      <h2><span class="title-txt">🏭 المصاريف الثابتة الشهرية</span></h2>
+      <div class="form-grid">
+        <div class="field">
+          <label>الإيجار الشهري (ج)</label>
+          <input type="number" id="set_rent" value="${f.rent||''}" placeholder="0">
+        </div>
+        <div class="field">
+          <label>الكهرباء الشهرية (ج)</label>
+          <input type="number" id="set_electricity" value="${f.electricity||''}" placeholder="0">
+        </div>
+        <div class="field">
+          <label>ساعات العمل يومياً</label>
+          <input type="number" id="set_hours" value="${f.workHoursPerDay||9}" placeholder="9">
+        </div>
+        <div class="field">
+          <label>أيام العمل شهرياً</label>
+          <input type="number" id="set_days" value="${f.workDaysPerMonth||26}" placeholder="26">
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px;">إجمالي ساعات العمل الشهرية: <strong>${fmt(monthlyHours)} ساعة</strong></div>
+      <button class="btn brass" style="margin-top:14px;" onclick="saveFactorySettings()">حفظ</button>
+    </div>
+
+    <div class="panel">
+      <h2><span class="title-txt">👥 الموظفين والأقسام</span></h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:12px;">كل موظف تحدد قسمه (مقص/خياطة/امباج) وراتبه الشهري، عشان يتحمل بالكامل على تكلفة القسم ده.</p>
+      <div id="empRows"></div>
+      <button class="btn ghost small" onclick="addEmpRow()">+ إضافة موظف</button>
+      <button class="btn brass" style="margin-top:14px; display:block;" onclick="saveEmployees()">حفظ الموظفين</button>
+
+      ${f.employees.length>0 ? `
+      <div class="section-divider">قائمة الموظفين الحالية</div>
+      <table class="data-table">
+        <thead><tr><th>الاسم</th><th>القسم</th><th>الراتب</th><th></th></tr></thead>
+        <tbody>
+          ${f.employees.map(e=>`
+            <tr>
+              <td>${escapeHtml(e.name)}</td>
+              <td>${INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept}</td>
+              <td>${fmt(e.salary)} ج</td>
+              <td><button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>` : ''}
+    </div>
+
+    <div class="panel">
+      <h2><span class="title-txt">💰 تكلفة الساعة لكل قسم (محسوبة تلقائياً)</span></h2>
+      ${INTERNAL_DEPTS.map(d=>{
+        const rate = getDeptHourlyRate(d.key);
+        const breakdown = getDeptMonthlyCost(d.key);
+        return `<div class="rate-card">
+          <div>
+            <div class="dept-name">${d.label}</div>
+            <div class="dept-pct">نسبة من الثابتة: ${(d.pct*100).toFixed(0)}% = ${fmt(breakdown.fixedShare)} ج + رواتب ${fmt(breakdown.salariesShare)} ج</div>
+          </div>
+          <div style="text-align:left;">
+            <div class="rate-val">${fmt(rate)} ج</div>
+            <div class="rate-lbl">لكل ساعة</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  window._empRowCount = 0;
+}
+
+function saveFactorySettings(){
+  state.factory.rent = Number(document.getElementById('set_rent').value)||0;
+  state.factory.electricity = Number(document.getElementById('set_electricity').value)||0;
+  state.factory.workHoursPerDay = Number(document.getElementById('set_hours').value)||9;
+  state.factory.workDaysPerMonth = Number(document.getElementById('set_days').value)||26;
+  saveState();
+  renderSettingsView();
+  toast('تم حفظ الإعدادات ✓');
+}
+
+function addEmpRow(){
+  window._empRowCount = (window._empRowCount||0)+1;
+  const idx = window._empRowCount;
+  const wrap = document.getElementById('empRows');
+  const row = document.createElement('div');
+  row.className = 'emp-row';
+  row.id = 'empRow_'+idx;
+  row.innerHTML = `
+    <div class="field"><label>اسم الموظف</label><input type="text" id="emp_name_${idx}" placeholder="أحمد محمد"></div>
+    <div class="field"><label>القسم</label>
+      <select id="emp_dept_${idx}">
+        ${INTERNAL_DEPTS.map(d=>`<option value="${d.key}">${d.label}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>الراتب الشهري (ج)</label><input type="number" id="emp_salary_${idx}" placeholder="3000"></div>
+    <button class="icon-btn" onclick="document.getElementById('empRow_${idx}').remove()">🗑</button>
+  `;
+  wrap.appendChild(row);
+}
+
+function saveEmployees(){
+  const rows = document.querySelectorAll('#empRows .emp-row');
+  let added = 0;
+  rows.forEach(row=>{
+    const idx = row.id.split('_')[1];
+    const name = document.getElementById('emp_name_'+idx).value.trim();
+    const dept = document.getElementById('emp_dept_'+idx).value;
+    const salary = Number(document.getElementById('emp_salary_'+idx).value)||0;
+    if(name && salary>0){
+      state.factory.employees.push({id:uid(), name, dept, salary});
+      added++;
+    }
+  });
+  if(added===0){ toast('مفيش موظفين جدد لإضافتهم'); return; }
+  saveState();
+  renderSettingsView();
+  toast(`تم إضافة ${added} موظف ✓`);
+}
+
+function deleteEmployee(empId){
+  if(!confirm('متأكد من حذف الموظف؟')) return;
+  state.factory.employees = state.factory.employees.filter(e=>e.id!==empId);
+  saveState();
+  renderSettingsView();
+  toast('تم الحذف');
+}
+
+/* ============================================================
+   إضافة موديل جديد
+============================================================ */
+function openAddModelModal(){
+  const html = `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3>موديل جديد</h3>
+    <div class="form-grid" style="margin-bottom:16px;">
+      <div class="field">
+        <label>اسم الموديل</label>
+        <input type="text" id="nm_name" placeholder="مثال: تيشرت صيفي دفعة يوليو">
+      </div>
+      <div class="field">
+        <label>سعر البيع للقطعة (ج)</label>
+        <input type="number" id="nm_price" placeholder="45">
+      </div>
+      <div class="field">
+        <label>العدد المتوقع الإجمالي (قطعة)</label>
+        <input type="number" id="nm_expected" placeholder="500">
+      </div>
+    </div>
+
+    <div class="section-divider">الألوان والأثواب والمقاسات المتوقعة</div>
+    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">لكل لون: عدد الأثواب المتوقع، وتحتها تفصيل المقاسات المتوقعة (مقاس + عدد قطع) عشان تقارنها بعدين بالفعلي بعد القص.</p>
+    <div id="colorRows"></div>
+    <button class="btn ghost small" onclick="addColorRow()">+ إضافة لون</button>
+
+    <div class="section-divider">مراحل الموديل والوقت المتوقع</div>
+    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">حدد المراحل اللي الموديل ده هيدخلها. الأقسام الداخلية (مقص/خياطة/امباج) تكلفتها بتتحسب تلقائي من الوقت × تكلفة الساعة. المراحل الخارجية تكتب تكلفتها يدوي.</p>
+    <div class="form-grid">
+      ${ALL_STAGES.map(st=>`
+        <div class="dept-stage-box ${st.internal?'internal':'external'}">
+          <label style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:13px;">
+            <input type="checkbox" id="stage_${st.key}_enabled">
+            ${st.label}
+            <span class="badge ${st.internal?'internal':'external'}" style="margin-right:auto;">${st.internal?'داخلي':'خارجي'}</span>
+          </label>
+          <div style="margin-top:8px;">
+            <input type="number" id="stage_${st.key}_time" placeholder="الوقت المتوقع (ساعة)" style="margin-bottom:6px;">
+            ${st.internal ? `<div class="hint" id="stage_${st.key}_rate_hint">تكلفة الساعة: ${fmt(getDeptHourlyRate(st.key))} ج</div>` :
+              `<input type="number" id="stage_${st.key}_cost" placeholder="التكلفة المتوقعة الكلية (ج)">`}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <button class="btn brass full" style="margin-top:18px;" onclick="saveNewModel()">حفظ الموديل</button>
+  `;
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('active');
+  window._colorRowCount = 0;
+  addColorRow(); addColorRow();
+}
+
+function addColorRow(){
+  window._colorRowCount = (window._colorRowCount||0) + 1;
+  const idx = window._colorRowCount;
+  window['_sizeRowCount_'+idx] = 0;
+  const wrap = document.getElementById('colorRows');
+  const card = document.createElement('div');
+  card.className = 'color-card';
+  card.id = 'colorRow_'+idx;
+  card.innerHTML = `
+    <div class="color-top">
+      <div class="field"><label>اسم اللون</label><input type="text" id="cr_name_${idx}" placeholder="أبيض"></div>
+      <div class="field"><label>لون الدائرة</label><input type="color" id="cr_hex_${idx}" value="#cccccc" style="height:38px; padding:2px;"></div>
+      <button class="icon-btn" onclick="document.getElementById('colorRow_${idx}').remove()">🗑 حذف اللون</button>
+    </div>
+    <div class="field" style="max-width:220px; margin-bottom:12px;">
+      <label>عدد الأثواب المتوقع (خامة)</label>
+      <input type="number" id="cr_bolts_${idx}" placeholder="10">
+    </div>
+    <div class="section-divider" style="margin:10px 0 8px; font-size:11px;">المقاسات المتوقعة لهذا اللون</div>
+    <div id="sizeRows_${idx}"></div>
+    <button class="btn ghost small" type="button" onclick="addSizeRowToColor(${idx})">+ إضافة مقاس</button>
+    <div class="size-total" id="sizeTotal_${idx}">إجمالي القطع المتوقعة للون ده: 0</div>
+  `;
+  wrap.appendChild(card);
+  addSizeRowToColor(idx);
+}
+
+function addSizeRowToColor(colorIdx){
+  window['_sizeRowCount_'+colorIdx] = (window['_sizeRowCount_'+colorIdx]||0) + 1;
+  const sIdx = window['_sizeRowCount_'+colorIdx];
+  const wrap = document.getElementById('sizeRows_'+colorIdx);
+  const row = document.createElement('div');
+  row.className = 'size-row';
+  row.id = `sizeRow_${colorIdx}_${sIdx}`;
+  row.innerHTML = `
+    <select id="size_sel_${colorIdx}_${sIdx}" onchange="updateColorSizeTotal(${colorIdx})">
+      ${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+    </select>
+    <input type="number" id="size_qty_${colorIdx}_${sIdx}" placeholder="عدد القطع" oninput="updateColorSizeTotal(${colorIdx})">
+    <button class="icon-btn" type="button" onclick="document.getElementById('sizeRow_${colorIdx}_${sIdx}').remove(); updateColorSizeTotal(${colorIdx})">🗑</button>
+  `;
+  wrap.appendChild(row);
+}
+
+function updateColorSizeTotal(colorIdx){
+  const rows = document.querySelectorAll(`#sizeRows_${colorIdx} .size-row`);
+  let total = 0;
+  rows.forEach(row=>{
+    const qtyInput = row.querySelector('input[type="number"]');
+    total += Number(qtyInput.value)||0;
+  });
+  const totalEl = document.getElementById('sizeTotal_'+colorIdx);
+  if(totalEl) totalEl.textContent = `إجمالي القطع المتوقعة للون ده: ${total}`;
+}
+
+function saveNewModel(){
+  const name = document.getElementById('nm_name').value.trim();
+  const price = Number(document.getElementById('nm_price').value);
+  const expected = Number(document.getElementById('nm_expected').value);
+
+  if(!name){ toast('اكتب اسم الموديل الأول'); return; }
+  if(!price || price<=0){ toast('اكتب سعر بيع صحيح'); return; }
+  if(!expected || expected<=0){ toast('اكتب العدد المتوقع'); return; }
+
+  const colorRows = document.querySelectorAll('#colorRows .color-card');
+  const colors = [];
+  colorRows.forEach(card=>{
+    const idx = card.id.split('_')[1];
+    const cname = document.getElementById('cr_name_'+idx).value.trim();
+    const chex = document.getElementById('cr_hex_'+idx).value;
+    const cbolts = Number(document.getElementById('cr_bolts_'+idx).value)||0;
+    if(!cname) return;
+
+    const sizeBreakdown = [];
+    const sizeRows = card.querySelectorAll(`#sizeRows_${idx} .size-row`);
+    sizeRows.forEach(sRow=>{
+      const select = sRow.querySelector('select');
+      const qtyInput = sRow.querySelector('input[type="number"]');
+      const size = select.value;
+      const qty = Number(qtyInput.value)||0;
+      if(qty>0) sizeBreakdown.push({size, qty});
+    });
+
+    colors.push({id:uid(), name:cname, hex:chex, expectedBolts:cbolts, receivedBolts:0, sizeBreakdown});
+  });
+  if(colors.length===0){ toast('ضيف لون واحد على الأقل'); return; }
+
+  const stagesPlanned = [];
+  const stageLogs = {};
+  ALL_STAGES.forEach(st=>{
+    const enabled = document.getElementById('stage_'+st.key+'_enabled').checked;
+    if(!enabled) return;
+    const time = Number(document.getElementById('stage_'+st.key+'_time').value)||0;
+    const cost = st.internal ? null : (Number(document.getElementById('stage_'+st.key+'_cost').value)||0);
+    stagesPlanned.push({key:st.key, label:st.label, internal:st.internal, expectedTime:time, expectedCost:cost});
+    stageLogs[st.key] = [];
+  });
+  if(stagesPlanned.length===0){ toast('حدد مرحلة واحدة على الأقل للموديل'); return; }
+
+  const model = {
+    id: uid(), name, sellPrice:price, expectedTotal:expected,
+    colors, stagesPlanned, cutParts:[], stageLogs, createdAt: Date.now()
+  };
+  state.models.push(model);
+  saveState();
+  closeModal();
+  renderModelGrid();
+  toast('تم إنشاء الموديل ✓');
+  openModelDetail(model.id);
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('active');
+  document.getElementById('modalContent').innerHTML = '';
+}
+
+/* ============================================================
+   تفاصيل الموديل
+============================================================ */
+let currentModelId = null;
+let currentDetailTab = 'overview';
+
+function openModelDetail(id){
+  currentModelId = id;
+  currentDetailTab = 'overview';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-detail').classList.add('active');
+  renderModelDetail();
+}
+
+function backToModels(){
+  currentModelId = null;
+  document.getElementById('view-detail').classList.remove('active');
+  document.getElementById('view-models').classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="models"]').classList.add('active');
+  renderModelGrid();
+}
+
+function getCurrentModel(){ return state.models.find(m=>m.id===currentModelId); }
+
+function renderModelDetail(){
+  const m = getCurrentModel();
+  if(!m){ backToModels(); return; }
+
+  const cost = calcModelCost(m);
+  const receivedTotal = m.colors.reduce((s,c)=>s+(Number(c.receivedBolts)||0),0);
+  const expectedBoltsTotal = m.colors.reduce((s,c)=>s+(Number(c.expectedBolts)||0),0);
+
+  const tabsHtml = `
+    <div class="stage-tabs">
+      <div class="stage-tab ${currentDetailTab==='overview'?'active':''}" onclick="switchDetailTab('overview')">نظرة عامة</div>
+      <div class="stage-tab ${currentDetailTab==='receiving'?'active':''}" onclick="switchDetailTab('receiving')">استلام المخزون</div>
+      <div class="stage-tab ${currentDetailTab==='cutting'?'active':''}" onclick="switchDetailTab('cutting')">بعد القص</div>
+      ${(m.stagesPlanned||[]).map(sp=>{
+        const hasLogs = (m.stageLogs[sp.key]||[]).length>0;
+        return `<div class="stage-tab ${currentDetailTab===sp.key?'active':''} ${hasLogs?'done-marker':''}" onclick="switchDetailTab('${sp.key}')">${sp.label}</div>`;
+      }).join('')}
+      <div class="stage-tab ${currentDetailTab==='cost'?'active':''}" onclick="switchDetailTab('cost')">💰 التكلفة والربح</div>
+    </div>
+  `;
+
+  let bodyHtml = '';
+  if(currentDetailTab==='overview') bodyHtml = renderOverviewTab(m, cost);
+  else if(currentDetailTab==='receiving') bodyHtml = renderReceivingTab(m);
+  else if(currentDetailTab==='cutting') bodyHtml = renderCuttingTab(m);
+  else if(currentDetailTab==='cost') bodyHtml = renderCostTab(m, cost);
+  else bodyHtml = renderStageLogTab(m, currentDetailTab);
+
+  document.getElementById('view-detail').innerHTML = `
+    <div class="back-btn" onclick="backToModels()">→ رجوع للموديلات</div>
+    <div class="model-detail-header">
+      <div>
+        <h2>${escapeHtml(m.name)}</h2>
+        <div style="font-size:12px; color:#8a8070; margin-top:4px;">
+          استلام: ${fmt(receivedTotal)}/${fmt(expectedBoltsTotal)} ثوب &nbsp;•&nbsp;
+          قص: ${fmt(getTotalCutQty(m))}/${fmt(m.expectedTotal)} قطعة
+        </div>
+      </div>
+      <div class="price-tag">${fmt(m.sellPrice)} ج / قطعة</div>
+    </div>
+    ${tabsHtml}
+    <div id="detailBody">${bodyHtml}</div>
+  `;
+}
+
+function switchDetailTab(tab){ currentDetailTab = tab; renderModelDetail(); }
+
+/* ---------- نظرة عامة ---------- */
+function renderOverviewTab(m, cost){
+  return `
+    <div class="panel">
+      <h2>ملخص الموديل</h2>
+      <div class="cost-summary">
+        <div class="cost-item"><div class="lbl">العدد المتوقع</div><div class="val">${fmt(m.expectedTotal)}</div></div>
+        <div class="cost-item"><div class="lbl">سعر البيع</div><div class="val">${fmt(m.sellPrice)} ج</div></div>
+        <div class="cost-item"><div class="lbl">تكلفة القطعة</div><div class="val">${fmt(cost.costPerUnit)} ج</div></div>
+        <div class="cost-item profit ${cost.profitPerUnit<0?'negative':''}"><div class="lbl">ربح القطعة</div><div class="val">${fmt(cost.profitPerUnit)} ج</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>الألوان</h2>
+      <table class="data-table">
+        <thead><tr><th></th><th>اللون</th><th>أثواب متوقعة</th><th>أثواب مستلمة</th><th>الحالة</th></tr></thead>
+        <tbody>
+          ${m.colors.map(c=>`
+            <tr>
+              <td><span class="swatch" style="background:${c.hex}"></span></td>
+              <td>${escapeHtml(c.name)}</td>
+              <td>${fmt(c.expectedBolts)}</td>
+              <td>${fmt(c.receivedBolts)}</td>
+              <td>${Number(c.receivedBolts)>=Number(c.expectedBolts) && Number(c.expectedBolts)>0 ? '<span class="badge ok">مكتمل</span>' : '<span class="badge pending">جاري</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2><span class="title-txt">المقاسات المتوقعة لكل لون</span></h2>
+      ${m.colors.map(c=>{
+        const sb = c.sizeBreakdown||[];
+        const colorTotal = sb.reduce((s,r)=>s+(Number(r.qty)||0),0);
+        return `
+          <div style="margin-bottom:14px;">
+            <div style="font-weight:700; font-size:13px; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+              <span class="swatch" style="background:${c.hex}"></span> ${escapeHtml(c.name)}
+              <span class="badge pending">${fmt(colorTotal)} قطعة متوقعة</span>
+            </div>
+            ${sb.length===0 ? `<div style="font-size:12px; color:#8a8070;">لسه معملتش تفصيل مقاسات للون ده.</div>` : `
+            <table class="data-table">
+              <thead><tr><th>المقاس</th><th>عدد القطع المتوقع</th></tr></thead>
+              <tbody>
+                ${sb.map(r=>`<tr><td>${r.size}</td><td>${fmt(r.qty)}</td></tr>`).join('')}
+              </tbody>
+            </table>`}
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div class="panel">
+      <h2>حذف الموديل</h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">الإجراء ده نهائي وهيمسح كل بيانات الموديل.</p>
+      <button class="btn danger small" onclick="deleteModel()">حذف الموديل نهائياً</button>
+    </div>
+  `;
+}
+
+function deleteModel(){
+  if(!confirm('متأكد إنك عايز تمسح الموديل ده نهائياً؟')) return;
+  state.models = state.models.filter(m=>m.id!==currentModelId);
+  saveState();
+  toast('تم حذف الموديل');
+  backToModels();
+}
+
+/* ---------- استلام المخزون ---------- */
+function renderReceivingTab(m){
+  return `
+    <div class="panel">
+      <h2>تسجيل استلام الأثواب</h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:14px;">سجل العدد الفعلي من الأثواب اللي استلمتها لكل لون.</p>
+      <table class="data-table">
+        <thead><tr><th></th><th>اللون</th><th>متوقع</th><th>مستلم فعلياً</th><th>تحديث</th></tr></thead>
+        <tbody>
+          ${m.colors.map(c=>`
+            <tr>
+              <td><span class="swatch" style="background:${c.hex}"></span></td>
+              <td>${escapeHtml(c.name)}</td>
+              <td>${fmt(c.expectedBolts)}</td>
+              <td><strong>${fmt(c.receivedBolts)}</strong></td>
+              <td>
+                <input type="number" id="recv_${c.id}" placeholder="أضف عدد" style="width:100px; padding:6px 8px; border:1.5px solid var(--line); border-radius:6px;">
+                <button class="btn small brass" onclick="addReceivedBolts('${c.id}')">إضافة</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function addReceivedBolts(colorId){
+  const input = document.getElementById('recv_'+colorId);
+  const val = Number(input.value);
+  if(!val || val<=0){ toast('اكتب عدد صحيح'); return; }
+  const m = getCurrentModel();
+  const c = m.colors.find(x=>x.id===colorId);
+  c.receivedBolts = (Number(c.receivedBolts)||0) + val;
+  saveState();
+  renderModelDetail();
+  toast(`تم إضافة ${val} ثوب ${c.name}`);
+}
+
+/* ---------- بعد القص ---------- */
+function renderCuttingTab(m){
+  const cutParts = m.cutParts || [];
+  const totalCut = getTotalCutQty(m);
+  return `
+    <div class="panel">
+      <h2>تسجيل قطع بعد القص</h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:14px;">كل سطر = لون + جزء (ظهر/أمامي/كم..) + مقاس + عدد القطع الفعلي.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label>اللون</label>
+          <select id="cut_color">${m.colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>الجزء</label><input type="text" id="cut_part" placeholder="مثال: ظهر، أمامي، كم"></div>
+        <div class="field">
+          <label>المقاس</label>
+          <select id="cut_size">${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>عدد القطع</label><input type="number" id="cut_qty" placeholder="50"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addCutRow()">إضافة السطر</button>
+    </div>
+
+    <div class="panel">
+      <h2><span class="title-txt">سجل القص</span><span class="badge pending">إجمالي: ${fmt(totalCut)} قطعة</span></h2>
+      ${cutParts.length===0 ? `<div class="empty-state"><div class="icon">✂️</div><p>لسه مفيش قطع مسجلة بعد القص.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>اللون</th><th>الجزء</th><th>المقاس</th><th>العدد</th><th></th></tr></thead>
+        <tbody>
+          ${cutParts.map(row=>{
+            const color = m.colors.find(c=>c.id===row.colorId);
+            return `<tr>
+              <td><span class="swatch" style="background:${color?color.hex:'#ccc'}"></span> ${escapeHtml(color?color.name:'—')}</td>
+              <td>${escapeHtml(row.part)}</td><td>${row.size}</td><td>${fmt(row.qty)}</td>
+              <td><button class="icon-btn" onclick="deleteCutRow('${row.id}')">🗑</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+function addCutRow(){
+  const colorId = document.getElementById('cut_color').value;
+  const part = document.getElementById('cut_part').value.trim();
+  const size = document.getElementById('cut_size').value;
+  const qty = Number(document.getElementById('cut_qty').value);
+  if(!part){ toast('اكتب اسم الجزء'); return; }
+  if(!qty || qty<=0){ toast('اكتب عدد صحيح'); return; }
+  const m = getCurrentModel();
+  m.cutParts.push({id:uid(), colorId, part, size, qty});
+  saveState(); renderModelDetail(); toast('تم تسجيل القطع ✓');
+}
+
+function deleteCutRow(rowId){
+  const m = getCurrentModel();
+  m.cutParts = m.cutParts.filter(r=>r.id!==rowId);
+  saveState(); renderModelDetail();
+}
+
+/* ---------- مراحل التصنيع ---------- */
+function renderStageLogTab(m, stageKey){
+  const sp = (m.stagesPlanned||[]).find(s=>s.key===stageKey);
+  if(!sp) return `<div class="empty-state"><p>المرحلة دي مش مفعّلة لهذا الموديل.</p></div>`;
+  const logs = m.stageLogs[stageKey] || [];
+  const totalActualCost = logs.reduce((s,l)=>s+(Number(l.cost)||0),0);
+  const totalActualTime = logs.reduce((s,l)=>s+(Number(l.time)||0),0);
+  const hourlyRate = sp.internal ? getDeptHourlyRate(sp.key) : null;
+  const plannedCost = sp.internal ? hourlyRate*(Number(sp.expectedTime)||0) : (Number(sp.expectedCost)||0);
+
+  return `
+    <div class="panel">
+      <h2><span class="title-txt">المتوقع <span class="badge ${sp.internal?'internal':'external'}">${sp.internal?'داخلي':'خارجي'}</span></span></h2>
+      <div class="cost-summary">
+        <div class="cost-item"><div class="lbl">الوقت المتوقع</div><div class="val">${fmt(sp.expectedTime)} س</div></div>
+        ${sp.internal ? `<div class="cost-item"><div class="lbl">تكلفة الساعة (حالياً)</div><div class="val">${fmt(hourlyRate)} ج</div></div>` : ''}
+        <div class="cost-item"><div class="lbl">التكلفة المتوقعة الكلية</div><div class="val">${fmt(plannedCost)} ج</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>تسجيل دفعة فعلية - ${sp.label}</h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:14px;">كل مرة تحصل فيها المرحلة دي، سجلها كسطر منفصل بالسعر والوقت الفعلي.</p>
+      <div class="form-grid">
+        <div class="field"><label>عدد القطع في الدفعة</label><input type="number" id="stage_qty" placeholder="200"></div>
+        <div class="field"><label>التكلفة الفعلية (ج)</label><input type="number" id="stage_cost" placeholder="500"></div>
+        <div class="field"><label>الوقت الفعلي (ساعة)</label><input type="number" id="stage_time" placeholder="3"></div>
+        <div class="field"><label>ملاحظة (اختياري)</label><input type="text" id="stage_note" placeholder="مثال: دفعة اللون الأحمر"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addStageLog('${stageKey}')">تسجيل الدفعة</button>
+    </div>
+
+    <div class="panel">
+      <h2><span class="title-txt">سجل الدفعات الفعلية</span><span class="badge ok">إجمالي: ${fmt(totalActualCost)} ج / ${fmt(totalActualTime)} س</span></h2>
+      ${logs.length===0 ? `<div class="empty-state"><div class="icon">📋</div><p>لسه مفيش دفعات مسجلة لمرحلة ${sp.label}.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>التاريخ</th><th>عدد القطع</th><th>التكلفة</th><th>الوقت</th><th>ملاحظة</th><th></th></tr></thead>
+        <tbody>
+          ${logs.map(l=>`
+            <tr>
+              <td>${new Date(l.date).toLocaleDateString('ar-EG')}</td>
+              <td>${fmt(l.qty)}</td><td>${fmt(l.cost)} ج</td><td>${fmt(l.time)} س</td>
+              <td>${escapeHtml(l.note||'—')}</td>
+              <td><button class="icon-btn" onclick="deleteStageLog('${stageKey}','${l.id}')">🗑</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot><tr><td colspan="2">الإجمالي</td><td>${fmt(totalActualCost)} ج</td><td>${fmt(totalActualTime)} س</td><td colspan="2"></td></tr></tfoot>
+      </table>`}
+    </div>
+  `;
+}
+
+function addStageLog(stageKey){
+  const qty = Number(document.getElementById('stage_qty').value);
+  const cost = Number(document.getElementById('stage_cost').value);
+  const time = Number(document.getElementById('stage_time').value)||0;
+  const note = document.getElementById('stage_note').value.trim();
+  if(!qty || qty<=0){ toast('اكتب عدد القطع'); return; }
+  if(cost===undefined || cost===null || isNaN(cost) || cost<0){ toast('اكتب التكلفة الفعلية'); return; }
+  const m = getCurrentModel();
+  if(!m.stageLogs[stageKey]) m.stageLogs[stageKey] = [];
+  m.stageLogs[stageKey].push({id:uid(), date:Date.now(), qty, cost, time, note});
+  saveState(); renderModelDetail(); toast('تم تسجيل الدفعة ✓');
+}
+
+function deleteStageLog(stageKey, logId){
+  const m = getCurrentModel();
+  m.stageLogs[stageKey] = m.stageLogs[stageKey].filter(l=>l.id!==logId);
+  saveState(); renderModelDetail();
+}
+
+/* ---------- التكلفة والربح ---------- */
+function renderCostTab(m, cost){
+  return `
+    <div class="panel">
+      <h2>ملخص الربحية</h2>
+      <div class="cost-summary">
+        <div class="cost-item"><div class="lbl">الإيراد المتوقع الكلي</div><div class="val">${fmt(cost.revenue)} ج</div></div>
+        <div class="cost-item"><div class="lbl">التكلفة الكلية</div><div class="val">${fmt(cost.totalCost)} ج</div></div>
+        <div class="cost-item profit ${cost.profit<0?'negative':''}"><div class="lbl">صافي الربح المتوقع</div><div class="val">${fmt(cost.profit)} ج</div></div>
+        <div class="cost-item profit ${cost.profitPerUnit<0?'negative':''}"><div class="lbl">ربح القطعة الواحدة</div><div class="val">${fmt(cost.profitPerUnit)} ج</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>تفصيل التكلفة حسب المرحلة</h2>
+      <div class="cost-breakdown">
+        ${cost.stageDetails.map(d=>`
+          <div class="line">
+            <span>
+              ${d.label}
+              <span class="badge ${d.internal?'internal':'external'}">${d.internal?'داخلي':'خارجي'}</span>
+              ${d.hasLogs ? '<span class="badge ok">فعلي</span>' : '<span class="badge pending">تقديري</span>'}
+              ${d.internal ? ` <span style="font-size:11px; color:#8a8070;">(${fmt(d.expectedTime)} س × ${fmt(d.hourlyRate)} ج/س)</span>` : ''}
+            </span>
+            <span>${fmt(d.usedCost)} ج</span>
+          </div>
+        `).join('')}
+        <div class="line total"><span>إجمالي التكلفة</span><span>${fmt(cost.totalCost)} ج</span></div>
+      </div>
+      <p style="font-size:11px; color:#8a8070; margin-top:12px;">
+        ⚠️ ملاحظة: المراحل اللي لسه ما اتسجلش لها دفعات فعلية بتتحسب تقديرياً (الداخلية من تكلفة الساعة الحالية، الخارجية من السعر المتوقع اللي كتبته). التكلفة هتبقى أدق كل ما تسجل الدفعات الفعلية أول بأول، ولو غيرت الإيجار/الرواتب في الإعدادات، التقدير هيتحدث تلقائي للمراحل اللي لسه معملتش لها تسجيل فعلي.
+      </p>
+    </div>
+  `;
+}
+
+/* ============================================================
+   أحداث عامة
+============================================================ */
+document.getElementById('fabAdd').addEventListener('click', openAddModelModal);
+document.getElementById('modalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'modalOverlay') closeModal();
+});
+
+/* ============================================================
+   بدء التشغيل
+============================================================ */
+loadState();
+renderModelGrid();
+</script>
+</body>
+</html>
