@@ -276,9 +276,9 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 .dept-stage-box.internal{border-color:var(--steel);}
 .dept-stage-box.external{border-color:var(--brass);}
 
-.modal-overlay{
+.edit-modal-overlay{
   position:fixed; inset:0; background:rgba(0,0,0,.45);
-  display:flex; align-items:center; justify-content:center;
+  display:none; align-items:center; justify-content:center;
   z-index:200; padding:16px;
 }
 .modal-box{
@@ -853,7 +853,7 @@ function renderEmployeesPanel(f){
       }).join('')}
     </div>
 
-    <div class="modal-overlay" id="editEmpOverlay" style="display:none;">
+    <div class="edit-modal-overlay" id="editEmpOverlay" style="display:none;">
       <div class="modal-box">
         <h3 style="margin-bottom:12px;">✏️ تعديل بيانات الموظف</h3>
         <input type="hidden" id="edit_emp_id">
