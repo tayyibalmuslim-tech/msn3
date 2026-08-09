@@ -394,7 +394,7 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
     <div class="stats">
       <div><div class="num" id="statModels">0</div><div class="lbl">موديل نشط</div></div>
       <div><div class="num" id="statPieces">0</div><div class="lbl">قطعة قيد التصنيع</div></div>
-      <div><div class="num" id="statProfit">0</div><div class="lbl">صافي ربح متوقع</div></div>
+      <div id="statProfitWrap" style="display:none;"><div class="num" id="statProfit">0</div><div class="lbl">صافي ربح متوقع</div></div>
     </div>
   </header>
 
@@ -452,6 +452,7 @@ const db = getFirestore(fbApp);
 /* كل صلاحيات التطبيق الممكنة، وكل قسم ليه view/edit */
 const PERMISSION_SECTIONS = [
   {key:'models',  label:'الموديلات'},
+  {key:'finance', label:'الحسابات المالية (أسعار/تكلفة/أرباح)'},
   {key:'employees', label:'الموظفين والمرتبات'},
   {key:'attendance', label:'الحضور والانصراف'},
   {key:'factory_settings', label:'إعدادات المصنع والتكاليف'},
@@ -522,6 +523,8 @@ onAuthStateChanged(auth, async (user)=>{
       (window.currentPermissions.users==='edit') ? 'inline-block' : 'none';
     document.getElementById('attendanceTabBtn').style.display =
       (window.currentPermissions.attendance==='view' || window.currentPermissions.attendance==='edit') ? 'inline-block' : 'none';
+    document.getElementById('statProfitWrap').style.display =
+      (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? '' : 'none';
     showApp();
     if(window.onAuthReady) window.onAuthReady();
   } else {
@@ -711,14 +714,17 @@ function renderModelGrid(){
 
   let totalPiecesInProgress = 0;
   let totalProfit = 0;
+  const canFinance = hasPerm('finance','view');
   state.models.forEach(m=>{
     const cut = getTotalCutQty(m);
     totalPiecesInProgress += cut;
-    const c = calcModelCost(m);
-    totalProfit += c.profit;
+    if(canFinance){
+      const c = calcModelCost(m);
+      totalProfit += c.profit;
+    }
   });
   document.getElementById('statPieces').textContent = fmt(totalPiecesInProgress);
-  document.getElementById('statProfit').textContent = fmt(totalProfit) + ' ج';
+  if(canFinance) document.getElementById('statProfit').textContent = fmt(totalProfit) + ' ج';
 
   if(state.models.length === 0){
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
@@ -742,7 +748,7 @@ function renderModelGrid(){
     return `<div class="model-card" onclick="openModelDetail('${m.id}')">
       <div class="head">
         <h3>${escapeHtml(m.name)}</h3>
-        <div class="price">${fmt(m.sellPrice)} ج</div>
+        ${canFinance ? `<div class="price">${fmt(m.sellPrice)} ج</div>` : ''}
       </div>
       <div class="body">
         <div class="colors">
@@ -1322,6 +1328,7 @@ function renderModelDetail(){
   if(!m){ backToModels(); return; }
 
   const cost = calcModelCost(m);
+  const canFinance = hasPerm('finance','view');
   const receivedTotal = m.colors.reduce((s,c)=>s+(Number(c.receivedBolts)||0),0);
   const expectedBoltsTotal = m.colors.reduce((s,c)=>s+(Number(c.expectedBolts)||0),0);
 
@@ -1334,7 +1341,7 @@ function renderModelDetail(){
         const hasLogs = (m.stageLogs[sp.key]||[]).length>0;
         return `<div class="stage-tab ${currentDetailTab===sp.key?'active':''} ${hasLogs?'done-marker':''}" onclick="switchDetailTab('${sp.key}')">${sp.label}</div>`;
       }).join('')}
-      <div class="stage-tab ${currentDetailTab==='cost'?'active':''}" onclick="switchDetailTab('cost')">💰 التكلفة والربح</div>
+      ${canFinance ? `<div class="stage-tab ${currentDetailTab==='cost'?'active':''}" onclick="switchDetailTab('cost')">💰 التكلفة والربح</div>` : ''}
     </div>
   `;
 
@@ -1342,7 +1349,8 @@ function renderModelDetail(){
   if(currentDetailTab==='overview') bodyHtml = renderOverviewTab(m, cost);
   else if(currentDetailTab==='receiving') bodyHtml = renderReceivingTab(m);
   else if(currentDetailTab==='cutting') bodyHtml = renderCuttingTab(m);
-  else if(currentDetailTab==='cost') bodyHtml = renderCostTab(m, cost);
+  else if(currentDetailTab==='cost' && canFinance) bodyHtml = renderCostTab(m, cost);
+  else if(currentDetailTab==='cost'){ currentDetailTab='overview'; bodyHtml = renderOverviewTab(m, cost); }
   else bodyHtml = renderStageLogTab(m, currentDetailTab);
 
   document.getElementById('view-detail').innerHTML = `
@@ -1355,7 +1363,7 @@ function renderModelDetail(){
           قص: ${fmt(getTotalCutQty(m))}/${fmt(m.expectedTotal)} قطعة
         </div>
       </div>
-      <div class="price-tag">${fmt(m.sellPrice)} ج / قطعة</div>
+      ${canFinance ? `<div class="price-tag">${fmt(m.sellPrice)} ج / قطعة</div>` : ''}
     </div>
     ${tabsHtml}
     <div id="detailBody">${bodyHtml}</div>
@@ -1366,14 +1374,17 @@ function switchDetailTab(tab){ currentDetailTab = tab; renderModelDetail(); }
 
 /* ---------- نظرة عامة ---------- */
 function renderOverviewTab(m, cost){
+  const canFinance = hasPerm('finance','view');
   return `
     <div class="panel">
       <h2>ملخص الموديل</h2>
       <div class="cost-summary">
         <div class="cost-item"><div class="lbl">العدد المتوقع</div><div class="val">${fmt(m.expectedTotal)}</div></div>
+        ${canFinance ? `
         <div class="cost-item"><div class="lbl">سعر البيع</div><div class="val">${fmt(m.sellPrice)} ج</div></div>
         <div class="cost-item"><div class="lbl">تكلفة القطعة</div><div class="val">${fmt(cost.costPerUnit)} ج</div></div>
         <div class="cost-item profit ${cost.profitPerUnit<0?'negative':''}"><div class="lbl">ربح القطعة</div><div class="val">${fmt(cost.profitPerUnit)} ج</div></div>
+        ` : ''}
       </div>
     </div>
     <div class="panel">
@@ -1606,6 +1617,9 @@ function deleteStageLog(stageKey, logId){
 
 /* ---------- التكلفة والربح ---------- */
 function renderCostTab(m, cost){
+  if(!hasPerm('finance','view')){
+    return `<div class="locked-msg">🚫 مفيش صلاحية لعرض الحسابات المالية</div>`;
+  }
   return `
     <div class="panel">
       <h2>ملخص الربحية</h2>
@@ -1754,6 +1768,7 @@ async function updateUserPermission(uid, sectionKey, newVal){
       window.currentPermissions = perms;
       document.getElementById('usersTabBtn').style.display = (perms.users==='edit') ? 'inline-block' : 'none';
       document.getElementById('attendanceTabBtn').style.display = (perms.attendance==='view' || perms.attendance==='edit') ? 'inline-block' : 'none';
+      document.getElementById('statProfitWrap').style.display = (perms.finance==='view' || perms.finance==='edit') ? '' : 'none';
     }
   }catch(e){
     toast('❌ فشل تحديث الصلاحية');
