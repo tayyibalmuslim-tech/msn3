@@ -361,6 +361,7 @@ const INTERNAL_DEPTS = [
   {key:'sewing',   label:'الخياطة',          pct:0.40},
   {key:'ambag',    label:'امباج (تشطيب+مكوة+تكيس)', pct:0.25},
 ];
+const SUPERVISION_DEPT = {key:'supervision', label:'إشراف'};
 const EXTERNAL_STAGES = [
   {key:'tatreez', label:'تطريز/طباعة'},
   {key:'buttons', label:'أزرار'},
@@ -385,26 +386,38 @@ function getMonthlyHours(){
   return h*d;
 }
 
+/* نصيب قسم معيّن من مرتبات موظفي الإشراف، حسب النسبة المخصصة لكل موظف */
+function getSupervisionShareForDept(deptKey){
+  return state.factory.employees
+    .filter(e=>e.dept===SUPERVISION_DEPT.key)
+    .reduce((s,e)=>{
+      const pct = Number(e.splits?.[deptKey])||0;
+      return s + (Number(e.salary)||0) * pct;
+    }, 0);
+}
+
 function getDeptHourlyRate(deptKey){
   const dept = INTERNAL_DEPTS.find(d=>d.key===deptKey);
   if(!dept) return 0;
   const fixedShare = ((Number(state.factory.rent)||0) + (Number(state.factory.electricity)||0)) * dept.pct;
-  const salariesShare = state.factory.employees
+  const directSalaries = state.factory.employees
     .filter(e=>e.dept===deptKey)
     .reduce((s,e)=>s+(Number(e.salary)||0), 0);
+  const supervisionShare = getSupervisionShareForDept(deptKey);
   const monthlyHours = getMonthlyHours();
   if(monthlyHours<=0) return 0;
-  return (fixedShare + salariesShare) / monthlyHours;
+  return (fixedShare + directSalaries + supervisionShare) / monthlyHours;
 }
 
 function getDeptMonthlyCost(deptKey){
   const dept = INTERNAL_DEPTS.find(d=>d.key===deptKey);
-  if(!dept) return {fixedShare:0, salariesShare:0, total:0};
+  if(!dept) return {fixedShare:0, salariesShare:0, supervisionShare:0, total:0};
   const fixedShare = ((Number(state.factory.rent)||0) + (Number(state.factory.electricity)||0)) * dept.pct;
-  const salariesShare = state.factory.employees
+  const directSalaries = state.factory.employees
     .filter(e=>e.dept===deptKey)
     .reduce((s,e)=>s+(Number(e.salary)||0), 0);
-  return {fixedShare, salariesShare, total:fixedShare+salariesShare};
+  const supervisionShare = getSupervisionShareForDept(deptKey);
+  return {fixedShare, salariesShare:directSalaries, supervisionShare, total:fixedShare+directSalaries+supervisionShare};
 }
 
 /* ============================================================
@@ -568,7 +581,7 @@ function renderSettingsView(){
 
     <div class="panel">
       <h2><span class="title-txt">👥 الموظفين والأقسام</span></h2>
-      <p style="font-size:12px; color:#8a8070; margin-bottom:12px;">كل موظف تحدد قسمه (مقص/خياطة/امباج) وراتبه الشهري، عشان يتحمل بالكامل على تكلفة القسم ده.</p>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:12px;">كل موظف تحدد قسمه (مقص/خياطة/امباج) وراتبه الشهري، عشان يتحمل بالكامل على تكلفة القسم ده. أو تختار "إشراف" لو الموظف بيشرف على أكتر من قسم، وتحدد نسبة توزيع مرتبه على الأقسام (تجمع 100%).</p>
       <div id="empRows"></div>
       <button class="btn ghost small" onclick="addEmpRow()">+ إضافة موظف</button>
       <button class="btn brass" style="margin-top:14px; display:block;" onclick="saveEmployees()">حفظ الموظفين</button>
@@ -581,7 +594,9 @@ function renderSettingsView(){
           ${f.employees.map(e=>`
             <tr>
               <td>${escapeHtml(e.name)}</td>
-              <td>${INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept}</td>
+              <td>${e.dept===SUPERVISION_DEPT.key
+                    ? `${SUPERVISION_DEPT.label} <span class="hint">(${INTERNAL_DEPTS.map(d=>`${d.label} ${Math.round((e.splits?.[d.key]||0)*100)}%`).join(' / ')})</span>`
+                    : (INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept)}</td>
               <td>${fmt(e.salary)} ج</td>
               <td><button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button></td>
             </tr>
@@ -598,7 +613,7 @@ function renderSettingsView(){
         return `<div class="rate-card">
           <div>
             <div class="dept-name">${d.label}</div>
-            <div class="dept-pct">نسبة من الثابتة: ${(d.pct*100).toFixed(0)}% = ${fmt(breakdown.fixedShare)} ج + رواتب ${fmt(breakdown.salariesShare)} ج</div>
+            <div class="dept-pct">نسبة من الثابتة: ${(d.pct*100).toFixed(0)}% = ${fmt(breakdown.fixedShare)} ج + رواتب مباشرة ${fmt(breakdown.salariesShare)} ج${breakdown.supervisionShare>0 ? ` + نصيب إشراف ${fmt(breakdown.supervisionShare)} ج` : ''}</div>
           </div>
           <div style="text-align:left;">
             <div class="rate-val">${fmt(rate)} ج</div>
@@ -631,29 +646,70 @@ function addEmpRow(){
   row.innerHTML = `
     <div class="field"><label>اسم الموظف</label><input type="text" id="emp_name_${idx}" placeholder="أحمد محمد"></div>
     <div class="field"><label>القسم</label>
-      <select id="emp_dept_${idx}">
+      <select id="emp_dept_${idx}" onchange="toggleEmpSplitMode(${idx})">
         ${INTERNAL_DEPTS.map(d=>`<option value="${d.key}">${d.label}</option>`).join('')}
+        <option value="${SUPERVISION_DEPT.key}">${SUPERVISION_DEPT.label}</option>
       </select>
     </div>
     <div class="field"><label>الراتب الشهري (ج)</label><input type="number" id="emp_salary_${idx}" placeholder="3000"></div>
+    <div class="field emp-split-wrap" id="emp_split_wrap_${idx}" style="display:none;">
+      <label>نسبة توزيع المرتب على الأقسام (لازم يجمعوا 100%)</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${INTERNAL_DEPTS.map(d=>`
+          <div style="flex:1; min-width:90px;">
+            <span class="hint" style="display:block; margin-bottom:2px;">${d.label}</span>
+            <input type="number" id="emp_split_${d.key}_${idx}" placeholder="0" min="0" max="100" oninput="updateSplitSumHint(${idx})">
+          </div>
+        `).join('')}
+      </div>
+      <div class="hint" id="emp_split_sum_${idx}" style="margin-top:4px;">الإجمالي: 0%</div>
+    </div>
     <button class="icon-btn" onclick="document.getElementById('empRow_${idx}').remove()">🗑</button>
   `;
   wrap.appendChild(row);
 }
 
+function toggleEmpSplitMode(idx){
+  const dept = document.getElementById('emp_dept_'+idx).value;
+  const wrap = document.getElementById('emp_split_wrap_'+idx);
+  wrap.style.display = (dept===SUPERVISION_DEPT.key) ? 'block' : 'none';
+}
+
+function updateSplitSumHint(idx){
+  const sum = INTERNAL_DEPTS.reduce((s,d)=>s + (Number(document.getElementById(`emp_split_${d.key}_${idx}`).value)||0), 0);
+  const hintEl = document.getElementById('emp_split_sum_'+idx);
+  hintEl.textContent = `الإجمالي: ${sum}%`;
+  hintEl.style.color = sum===100 ? 'var(--steel-dark)' : '#c0392b';
+}
+
 function saveEmployees(){
   const rows = document.querySelectorAll('#empRows .emp-row');
   let added = 0;
+  let skippedSplit = 0;
   rows.forEach(row=>{
     const idx = row.id.split('_')[1];
     const name = document.getElementById('emp_name_'+idx).value.trim();
     const dept = document.getElementById('emp_dept_'+idx).value;
     const salary = Number(document.getElementById('emp_salary_'+idx).value)||0;
-    if(name && salary>0){
+    if(!name || salary<=0) return;
+
+    if(dept===SUPERVISION_DEPT.key){
+      const splits = {};
+      let sum = 0;
+      INTERNAL_DEPTS.forEach(d=>{
+        const v = (Number(document.getElementById(`emp_split_${d.key}_${idx}`).value)||0)/100;
+        splits[d.key] = v;
+        sum += v;
+      });
+      if(Math.round(sum*100)!==100){ skippedSplit++; return; }
+      state.factory.employees.push({id:uid(), name, dept, salary, splits});
+      added++;
+    } else {
       state.factory.employees.push({id:uid(), name, dept, salary});
       added++;
     }
   });
+  if(skippedSplit>0){ toast(`⚠️ ${skippedSplit} موظف إشراف اتخطى — النسب لازم تجمع 100%`); if(added===0) return; }
   if(added===0){ toast('مفيش موظفين جدد لإضافتهم'); return; }
   saveState();
   renderSettingsView();
