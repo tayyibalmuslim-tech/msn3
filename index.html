@@ -276,6 +276,16 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 .dept-stage-box.internal{border-color:var(--steel);}
 .dept-stage-box.external{border-color:var(--brass);}
 
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center;
+  z-index:200; padding:16px;
+}
+.modal-box{
+  background:#fff; border-radius:12px; padding:20px;
+  width:100%; max-width:420px; max-height:90vh; overflow-y:auto;
+}
+
 @media (max-width:640px){
   header.top{flex-direction:column; align-items:flex-start;}
   header.top .stats{width:100%; justify-content:space-around;}
@@ -598,7 +608,10 @@ function renderSettingsView(){
                     ? `${SUPERVISION_DEPT.label} <span class="hint">(${INTERNAL_DEPTS.map(d=>`${d.label} ${Math.round((e.splits?.[d.key]||0)*100)}%`).join(' / ')})</span>`
                     : (INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept)}</td>
               <td>${fmt(e.salary)} ج</td>
-              <td><button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button></td>
+              <td style="white-space:nowrap;">
+                <button class="icon-btn" onclick="openEditEmployee('${e.id}')">✏️</button>
+                <button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button>
+              </td>
             </tr>
           `).join('')}
         </tbody>
@@ -621,6 +634,37 @@ function renderSettingsView(){
           </div>
         </div>`;
       }).join('')}
+    </div>
+
+    <div class="modal-overlay" id="editEmpOverlay" style="display:none;">
+      <div class="modal-box">
+        <h3 style="margin-bottom:12px;">✏️ تعديل بيانات الموظف</h3>
+        <input type="hidden" id="edit_emp_id">
+        <div class="field"><label>اسم الموظف</label><input type="text" id="edit_emp_name"></div>
+        <div class="field"><label>القسم</label>
+          <select id="edit_emp_dept" onchange="toggleEditSplitMode()">
+            ${INTERNAL_DEPTS.map(d=>`<option value="${d.key}">${d.label}</option>`).join('')}
+            <option value="${SUPERVISION_DEPT.key}">${SUPERVISION_DEPT.label}</option>
+          </select>
+        </div>
+        <div class="field"><label>الراتب الشهري (ج)</label><input type="number" id="edit_emp_salary"></div>
+        <div class="field emp-split-wrap" id="edit_emp_split_wrap" style="display:none;">
+          <label>نسبة توزيع المرتب على الأقسام (لازم يجمعوا 100%)</label>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            ${INTERNAL_DEPTS.map(d=>`
+              <div style="flex:1; min-width:90px;">
+                <span class="hint" style="display:block; margin-bottom:2px;">${d.label}</span>
+                <input type="number" id="edit_emp_split_${d.key}" placeholder="0" min="0" max="100" oninput="updateEditSplitSumHint()">
+              </div>
+            `).join('')}
+          </div>
+          <div class="hint" id="edit_emp_split_sum" style="margin-top:4px;">الإجمالي: 0%</div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:14px;">
+          <button class="btn brass" onclick="saveEditedEmployee()">حفظ التعديل</button>
+          <button class="btn ghost" onclick="closeEditEmployee()">إلغاء</button>
+        </div>
+      </div>
     </div>
   `;
   window._empRowCount = 0;
@@ -722,6 +766,78 @@ function deleteEmployee(empId){
   saveState();
   renderSettingsView();
   toast('تم الحذف');
+}
+
+function openEditEmployee(empId){
+  const emp = state.factory.employees.find(e=>e.id===empId);
+  if(!emp) return;
+  document.getElementById('edit_emp_id').value = emp.id;
+  document.getElementById('edit_emp_name').value = emp.name;
+  document.getElementById('edit_emp_dept').value = emp.dept;
+  document.getElementById('edit_emp_salary').value = emp.salary;
+  if(emp.dept===SUPERVISION_DEPT.key){
+    INTERNAL_DEPTS.forEach(d=>{
+      document.getElementById(`edit_emp_split_${d.key}`).value = Math.round((emp.splits?.[d.key]||0)*100);
+    });
+  } else {
+    INTERNAL_DEPTS.forEach(d=>{
+      document.getElementById(`edit_emp_split_${d.key}`).value = '';
+    });
+  }
+  toggleEditSplitMode();
+  document.getElementById('editEmpOverlay').style.display = 'flex';
+}
+
+function closeEditEmployee(){
+  document.getElementById('editEmpOverlay').style.display = 'none';
+}
+
+function toggleEditSplitMode(){
+  const dept = document.getElementById('edit_emp_dept').value;
+  const wrap = document.getElementById('edit_emp_split_wrap');
+  wrap.style.display = (dept===SUPERVISION_DEPT.key) ? 'block' : 'none';
+  if(dept===SUPERVISION_DEPT.key) updateEditSplitSumHint();
+}
+
+function updateEditSplitSumHint(){
+  const sum = INTERNAL_DEPTS.reduce((s,d)=>s + (Number(document.getElementById(`edit_emp_split_${d.key}`).value)||0), 0);
+  const hintEl = document.getElementById('edit_emp_split_sum');
+  hintEl.textContent = `الإجمالي: ${sum}%`;
+  hintEl.style.color = sum===100 ? 'var(--steel-dark)' : '#c0392b';
+}
+
+function saveEditedEmployee(){
+  const id = document.getElementById('edit_emp_id').value;
+  const emp = state.factory.employees.find(e=>e.id===id);
+  if(!emp) return;
+
+  const name = document.getElementById('edit_emp_name').value.trim();
+  const dept = document.getElementById('edit_emp_dept').value;
+  const salary = Number(document.getElementById('edit_emp_salary').value)||0;
+  if(!name || salary<=0){ toast('⚠️ لازم اسم وراتب أكبر من صفر'); return; }
+
+  emp.name = name;
+  emp.dept = dept;
+  emp.salary = salary;
+
+  if(dept===SUPERVISION_DEPT.key){
+    const splits = {};
+    let sum = 0;
+    INTERNAL_DEPTS.forEach(d=>{
+      const v = (Number(document.getElementById(`edit_emp_split_${d.key}`).value)||0)/100;
+      splits[d.key] = v;
+      sum += v;
+    });
+    if(Math.round(sum*100)!==100){ toast('⚠️ نسب التوزيع لازم تجمع 100%'); return; }
+    emp.splits = splits;
+  } else {
+    delete emp.splits;
+  }
+
+  saveState();
+  closeEditEmployee();
+  renderSettingsView();
+  toast('تم حفظ التعديل ✓');
 }
 
 /* ============================================================
