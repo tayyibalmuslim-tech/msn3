@@ -703,6 +703,7 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
     <button class="tab-btn" data-tab="month" onclick="switchMainTab('month')" id="monthTabBtn" style="display:none;">📅 الشهر والأرباح</button>
     <button class="tab-btn" data-tab="daily" onclick="switchMainTab('daily')" id="dailyTabBtn" style="display:none;">📥 إنتاج اليوم</button>
     <button class="tab-btn" data-tab="treasury" onclick="switchMainTab('treasury')" id="treasuryTabBtn" style="display:none;">💰 الخزينة</button>
+    <button class="tab-btn" data-tab="sales" onclick="switchMainTab('sales')" id="salesTabBtn" style="display:none;">🛒 العملاء والفواتير</button>
     <button class="tab-btn" data-tab="attendance" onclick="switchMainTab('attendance')" id="attendanceTabBtn" style="display:none;">🕒 الحضور والانصراف</button>
     <button class="tab-btn" data-tab="settings" onclick="switchMainTab('settings')">⚙️ إعدادات المصنع والتكاليف</button>
     <button class="tab-btn" data-tab="users" onclick="switchMainTab('users')" id="usersTabBtn" style="display:none;">👤 إدارة المستخدمين</button>
@@ -725,6 +726,8 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
   <section class="view" id="view-daily"></section>
 
   <section class="view" id="view-treasury"></section>
+
+  <section class="view" id="view-sales"></section>
 
   <button class="fab" id="fabAdd" title="موديل جديد">+</button>
 </div>
@@ -765,6 +768,7 @@ const PERMISSION_SECTIONS = [
   {key:'models',  label:'الموديلات'},
   {key:'finance', label:'الحسابات المالية (أسعار/تكلفة/أرباح)'},
   {key:'treasury', label:'الخزينة (حركة نقدية فعلية)'},
+  {key:'sales', label:'العملاء والفواتير'},
   {key:'employees', label:'الموظفين والمرتبات'},
   {key:'attendance', label:'الحضور والانصراف'},
   {key:'factory_settings', label:'إعدادات المصنع والتكاليف'},
@@ -843,6 +847,8 @@ onAuthStateChanged(auth, async (user)=>{
       (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? 'inline-flex' : 'none';
     document.getElementById('treasuryTabBtn').style.display =
       (window.currentPermissions.treasury==='view' || window.currentPermissions.treasury==='edit') ? 'inline-flex' : 'none';
+    document.getElementById('salesTabBtn').style.display =
+      (window.currentPermissions.sales==='view' || window.currentPermissions.sales==='edit') ? 'inline-flex' : 'none';
     document.getElementById('statProfitWrap').style.display =
       (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? '' : 'none';
     showApp();
@@ -891,6 +897,9 @@ function migrateState(){
   if(!Array.isArray(state.suppliers)) state.suppliers = [];
   if(!Array.isArray(state.supplierPayments)) state.supplierPayments = [];
   if(!Array.isArray(state.miscExpenses)) state.miscExpenses = [];
+  if(!Array.isArray(state.customers)) state.customers = [];
+  if(!Array.isArray(state.invoices)) state.invoices = [];
+  if(!Array.isArray(state.payments)) state.payments = [];
   state.models.forEach(m=>{ if(!m.sewingOps) m.sewingOps = []; });
   state.factory.employees.forEach(e=>{
     if(!e.payType) e.payType = 'monthly';
@@ -1351,6 +1360,9 @@ function switchMainTab(tab){
   } else if(tab==='treasury'){
     document.getElementById('view-treasury').classList.add('active');
     renderTreasuryView();
+  } else if(tab==='sales'){
+    document.getElementById('view-sales').classList.add('active');
+    renderSalesView();
   } else {
     document.getElementById('view-settings').classList.add('active');
     renderSettingsView();
@@ -2626,6 +2638,7 @@ async function updateUserPermission(uid, sectionKey, newVal){
       document.getElementById('monthTabBtn').style.display = (perms.finance==='view' || perms.finance==='edit') ? 'inline-flex' : 'none';
       document.getElementById('dailyTabBtn').style.display = (perms.finance==='view' || perms.finance==='edit') ? 'inline-flex' : 'none';
       document.getElementById('treasuryTabBtn').style.display = (perms.treasury==='view' || perms.treasury==='edit') ? 'inline-flex' : 'none';
+      document.getElementById('salesTabBtn').style.display = (perms.sales==='view' || perms.sales==='edit') ? 'inline-flex' : 'none';
       document.getElementById('statProfitWrap').style.display = (perms.finance==='view' || perms.finance==='edit') ? '' : 'none';
     }
   }catch(e){
@@ -3772,6 +3785,310 @@ async function deleteTreasuryEntry(id){
   saveState();
   renderTreasuryView();
   toast('تم الحذف');
+}
+
+/* ============================================================
+   العملاء والفواتير
+============================================================ */
+function calcCustomerBalance(customerId){
+  const totalInvoices = (state.invoices||[]).filter(i=>i.customerId===customerId).reduce((s,i)=>s+(Number(i.total)||0), 0);
+  const totalPayments = (state.payments||[]).filter(p=>p.customerId===customerId).reduce((s,p)=>s+(Number(p.amount)||0), 0);
+  return totalInvoices - totalPayments; // موجب = العميل مدين لنا | سالب = العميل دائن (دفع زيادة)
+}
+
+function refreshCustomerBalance(customerId){
+  const c = state.customers.find(x=>x.id===customerId);
+  if(c) c.balance = calcCustomerBalance(customerId);
+}
+
+window._salesTab = 'customers';
+window._salesQuery = '';
+
+function renderSalesView(){
+  if(!hasPerm('sales','view')){
+    document.getElementById('view-sales').innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض العملاء والفواتير</div>`;
+    return;
+  }
+  const subTabs = [
+    {k:'customers', l:'👤 العملاء'},
+    {k:'invoices', l:'🧾 الفواتير'},
+  ];
+  document.getElementById('view-sales').innerHTML = `
+    <div class="panel">
+      <h2><span class="title-txt">🛒 العملاء والفواتير</span></h2>
+    </div>
+    <div class="stage-tabs">
+      ${subTabs.map(t=>`<div class="stage-tab ${window._salesTab===t.k?'active':''}" onclick="switchSalesTab('${t.k}')">${t.l}</div>`).join('')}
+    </div>
+    <div id="salesSubBody"></div>
+  `;
+  renderSalesSubTab();
+}
+
+function switchSalesTab(tab){
+  window._salesTab = tab;
+  window._salesQuery = '';
+  renderSalesView();
+}
+
+function renderSalesSubTab(){
+  const el = document.getElementById('salesSubBody');
+  if(!el) return;
+  if(window._salesTab === 'customers') el.innerHTML = renderCustomersTab();
+  else if(window._salesTab === 'invoices') el.innerHTML = renderInvoicesTab();
+}
+
+/* ---------- العملاء ---------- */
+function renderCustomersTab(){
+  const canEdit = hasPerm('sales','edit');
+  const q = (window._salesQuery||'').trim();
+  const customers = state.customers.filter(c=>!q || c.name.includes(q) || (c.mobile||'').includes(q));
+  const totalDebt = state.customers.reduce((s,c)=>s+(c.balance||0), 0);
+
+  return `
+    ${canEdit ? `
+    <div class="panel">
+      <h2><span class="title-txt">➕ عميل جديد</span></h2>
+      <div class="form-grid">
+        <div class="field"><label>الاسم</label><input type="text" id="cust_name" placeholder="اسم العميل"></div>
+        <div class="field"><label>الموبايل</label><input type="text" id="cust_mobile"></div>
+        <div class="field"><label>ملاحظات</label><input type="text" id="cust_notes"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addCustomer()">إضافة العميل</button>
+    </div>
+    ` : ''}
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--line);">
+        <h2 style="margin:0; border:none; padding:0;"><span class="title-txt">👤 قائمة العملاء (${customers.length})</span></h2>
+        <input type="text" placeholder="🔍 بحث بالاسم أو الموبايل..." value="${escapeHtml(window._salesQuery||'')}" oninput="window._salesQuery=this.value; renderSalesSubTab();" style="max-width:240px; padding:9px 12px; border:1.5px solid var(--line-strong); border-radius:9px; font-family:inherit;">
+      </div>
+      <div class="hint" style="margin-bottom:14px;">إجمالي أرصدة العملاء: <strong style="color:${totalDebt>=0?'var(--amber)':'var(--ok)'};">${fmt(Math.abs(totalDebt))} ج ${totalDebt>=0?'(مديونية)':'(رصيد دائن لهم)'}</strong></div>
+      ${customers.length===0 ? `<div class="empty-state"><div class="icon">👤</div><p>مفيش عملاء مسجّلين.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>الاسم</th><th>الموبايل</th><th>الرصيد</th><th></th></tr></thead>
+        <tbody>
+          ${customers.map(c=>`
+            <tr>
+              <td>${escapeHtml(c.name)}</td>
+              <td>${escapeHtml(c.mobile||'—')}</td>
+              <td style="color:${(c.balance||0)>0?'var(--amber)':(c.balance||0)<0?'var(--ok)':'inherit'}; font-weight:600;">
+                ${fmt(Math.abs(c.balance||0))} ج ${(c.balance||0)>0?'(عليه)':(c.balance||0)<0?'(له)':''}
+              </td>
+              <td style="white-space:nowrap;">
+                <button class="icon-btn" title="فاتورة جديدة" onclick="openNewInvoice('${c.id}')">🧾</button>
+                <button class="icon-btn" title="كشف حساب" onclick="openCustomerStatement('${c.id}')">📄</button>
+                ${canEdit ? `<button class="icon-btn" title="تسجيل دفعة" onclick="openCustomerPay('${c.id}')">💵</button>` : ''}
+                ${canEdit ? `<button class="icon-btn" onclick="deleteCustomer('${c.id}')">🗑</button>` : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+function addCustomer(){
+  if(!requireEdit('sales','إضافة عميل')) return;
+  const name = document.getElementById('cust_name').value.trim();
+  const mobile = document.getElementById('cust_mobile').value.trim();
+  const notes = document.getElementById('cust_notes').value.trim();
+  if(!name){ toast('⚠️ اكتب اسم العميل'); return; }
+  state.customers.push({id:uid(), name, mobile, notes, balance:0});
+  saveState();
+  toast('✅ تم إضافة العميل');
+  renderSalesSubTab();
+}
+
+async function deleteCustomer(id){
+  if(!requireEdit('sales','حذف عميل')) return;
+  if(!await confirmDialog('هيتشال العميل وكل فواتيره ودفعاته المسجّلة.', {title:'حذف عميل', yes:'احذف', danger:true})) return;
+  state.customers = state.customers.filter(c=>c.id!==id);
+  state.invoices = state.invoices.filter(i=>i.customerId!==id);
+  state.payments = state.payments.filter(p=>p.customerId!==id);
+  saveState();
+  renderSalesSubTab();
+  toast('تم الحذف');
+}
+
+/* ---------- فاتورة جديدة ---------- */
+window._invItems = [];
+
+function openNewInvoice(customerId){
+  if(!requireEdit('sales','إضافة فاتورة')) return;
+  window._invCustomerId = customerId;
+  window._invItems = [{name:'', qty:1, price:0}];
+  renderInvoiceModal();
+}
+
+function renderInvoiceModal(){
+  const cust = state.customers.find(c=>c.id===window._invCustomerId);
+  if(!cust) return;
+  const items = window._invItems;
+  const total = items.reduce((s,it)=>s+((Number(it.qty)||0)*(Number(it.price)||0)), 0);
+
+  document.getElementById('modalContent').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3>🧾 فاتورة جديدة — ${escapeHtml(cust.name)}</h3>
+    <div id="invItemsWrap">
+      ${items.map((it,i)=>`
+        <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr; margin-bottom:8px;">
+          <div class="field"><label>${i===0?'اسم الصنف':''}</label><input type="text" value="${escapeHtml(it.name)}" oninput="updateInvItem(${i},'name',this.value)" placeholder="اسم الصنف/الموديل"></div>
+          <div class="field"><label>${i===0?'الكمية':''}</label><input type="number" value="${it.qty}" oninput="updateInvItem(${i},'qty',this.value)"></div>
+          <div class="field"><label>${i===0?'سعر القطعة (ج)':''}</label><input type="number" value="${it.price}" oninput="updateInvItem(${i},'price',this.value)"></div>
+        </div>
+      `).join('')}
+    </div>
+    <button class="btn ghost small" onclick="addInvItem()">+ صنف</button>
+    <div class="section-divider">الدفع</div>
+    <div class="form-grid">
+      <div class="field"><label>الإجمالي</label><input type="text" value="${fmt(total)} ج" disabled></div>
+      <div class="field"><label>دفعة مقدمة الآن (ج)</label><input type="number" id="inv_paid" value="0"></div>
+    </div>
+    <button class="btn brass full" style="margin-top:16px;" onclick="saveInvoice()">حفظ الفاتورة</button>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function addInvItem(){
+  window._invItems.push({name:'', qty:1, price:0});
+  renderInvoiceModal();
+}
+
+function updateInvItem(i, field, val){
+  window._invItems[i][field] = field==='name' ? val : Number(val)||0;
+  if(field!=='name') renderInvoiceModal();
+}
+
+function saveInvoice(){
+  if(!requireEdit('sales','إضافة فاتورة')) return;
+  const cust = state.customers.find(c=>c.id===window._invCustomerId);
+  if(!cust) return;
+  const items = window._invItems.filter(it=>it.name.trim() && Number(it.qty)>0);
+  if(items.length===0){ toast('⚠️ أضف صنف واحد على الأقل'); return; }
+  const total = items.reduce((s,it)=>s+((Number(it.qty)||0)*(Number(it.price)||0)), 0);
+  const paid = Number(document.getElementById('inv_paid').value)||0;
+  const custInvNum = state.invoices.filter(i=>i.customerId===cust.id).length + 1;
+
+  const inv = {
+    id:uid(), customerId:cust.id, custInvNum, date:todayStr(),
+    items, total, partialPay:paid, remaining: Math.max(0, total-paid),
+    payMethod: paid>=total?'كاش':paid>0?'دفعات':'آجل',
+    status:'مفتوحة', notes:[]
+  };
+  state.invoices.push(inv);
+  if(paid>0){
+    state.payments.push({id:uid(), customerId:cust.id, amount:paid, date:todayStr(), note:'دفعة عند إصدار الفاتورة #'+custInvNum});
+    state.treasury.push({id:uid(), type:'in', amount:paid, description:'دفعة فاتورة #'+custInvNum+' - '+cust.name, date:todayStr(), createdAt:Date.now()});
+  }
+  refreshCustomerBalance(cust.id);
+  saveState();
+  closeModal();
+  toast('✅ تم حفظ الفاتورة');
+  renderSalesView();
+}
+
+/* ---------- تسجيل دفعة من عميل ---------- */
+async function openCustomerPay(customerId){
+  if(!requireEdit('sales','تسجيل دفعة')) return;
+  const cust = state.customers.find(c=>c.id===customerId);
+  if(!cust) return;
+  const amountStr = await promptDialog(`مبلغ الدفعة من ${cust.name} (الرصيد الحالي: ${fmt(cust.balance||0)} ج):`, '', {title:'تسجيل دفعة', yes:'تسجيل'});
+  if(amountStr===null) return;
+  const amount = Number(amountStr)||0;
+  if(amount<=0){ toast('⚠️ مبلغ غير صحيح'); return; }
+  state.payments.push({id:uid(), customerId, amount, date:todayStr(), note:'دفعة مباشرة'});
+  state.treasury.push({id:uid(), type:'in', amount, description:'دفعة من '+cust.name, date:todayStr(), createdAt:Date.now()});
+  refreshCustomerBalance(customerId);
+  saveState();
+  toast('✅ تم تسجيل الدفعة');
+  renderSalesSubTab();
+}
+
+/* ---------- كشف حساب العميل ---------- */
+function openCustomerStatement(customerId){
+  window._stmtCustomerId = customerId;
+  renderCustomerStatementModal();
+}
+
+function renderCustomerStatementModal(){
+  const cust = state.customers.find(c=>c.id===window._stmtCustomerId);
+  if(!cust) return;
+  const invoices = state.invoices.filter(i=>i.customerId===cust.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const payments = state.payments.filter(p=>p.customerId===cust.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  document.getElementById('modalContent').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3>📄 كشف حساب — ${escapeHtml(cust.name)}</h3>
+    <div class="cost-summary" style="margin-bottom:18px;">
+      <div class="cost-item"><div class="lbl">إجمالي الفواتير</div><div class="val">${fmt(invoices.reduce((s,i)=>s+i.total,0))} ج</div></div>
+      <div class="cost-item"><div class="lbl">إجمالي المدفوع</div><div class="val" style="color:var(--ok);">${fmt(payments.reduce((s,p)=>s+p.amount,0))} ج</div></div>
+      <div class="cost-item profit ${cust.balance>0?'negative':''}"><div class="lbl">الرصيد الحالي</div><div class="val">${fmt(Math.abs(cust.balance||0))} ج ${(cust.balance||0)>0?'(عليه)':(cust.balance||0)<0?'(له)':''}</div></div>
+    </div>
+    <div class="section-divider">الفواتير</div>
+    ${invoices.length===0 ? `<div class="hint">مفيش فواتير.</div>` : `
+    <table class="data-table" style="margin-bottom:18px;">
+      <thead><tr><th>#</th><th>التاريخ</th><th>الأصناف</th><th>الإجمالي</th><th>متبقي</th></tr></thead>
+      <tbody>
+        ${invoices.map(i=>`
+          <tr>
+            <td>${i.custInvNum}</td>
+            <td>${i.date}</td>
+            <td>${i.items.map(it=>escapeHtml(it.name)).join('، ')}</td>
+            <td>${fmt(i.total)} ج</td>
+            <td style="color:${i.remaining>0?'var(--amber)':'var(--ok)'};">${fmt(i.remaining)} ج</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`}
+    <div class="section-divider">الدفعات</div>
+    ${payments.length===0 ? `<div class="hint">مفيش دفعات.</div>` : `
+    <table class="data-table">
+      <thead><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th></tr></thead>
+      <tbody>
+        ${payments.map(p=>`<tr><td>${p.date}</td><td>${fmt(p.amount)} ج</td><td>${escapeHtml(p.note||'—')}</td></tr>`).join('')}
+      </tbody>
+    </table>`}
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+/* ---------- كل الفواتير ---------- */
+function renderInvoicesTab(){
+  const q = (window._salesQuery||'').trim();
+  let invoices = [...state.invoices].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(q){
+    invoices = invoices.filter(i=>{
+      const cust = state.customers.find(c=>c.id===i.customerId);
+      return (cust && cust.name.includes(q)) || i.items.some(it=>it.name.includes(q));
+    });
+  }
+  return `
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--line);">
+        <h2 style="margin:0; border:none; padding:0;"><span class="title-txt">🧾 كل الفواتير (${invoices.length})</span></h2>
+        <input type="text" placeholder="🔍 بحث بالعميل أو الصنف..." value="${escapeHtml(window._salesQuery||'')}" oninput="window._salesQuery=this.value; renderSalesSubTab();" style="max-width:240px; padding:9px 12px; border:1.5px solid var(--line-strong); border-radius:9px; font-family:inherit;">
+      </div>
+      ${invoices.length===0 ? `<div class="empty-state"><div class="icon">🧾</div><p>مفيش فواتير مسجّلة.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>#</th><th>العميل</th><th>التاريخ</th><th>الأصناف</th><th>الإجمالي</th><th>متبقي</th><th>الحالة</th></tr></thead>
+        <tbody>
+          ${invoices.map(i=>{
+            const cust = state.customers.find(c=>c.id===i.customerId);
+            return `<tr>
+              <td>${i.custInvNum}</td>
+              <td>${escapeHtml(cust?.name||'(محذوف)')}</td>
+              <td>${i.date}</td>
+              <td>${i.items.map(it=>escapeHtml(it.name)).join('، ')}</td>
+              <td>${fmt(i.total)} ج</td>
+              <td style="color:${i.remaining>0?'var(--amber)':'var(--ok)'};">${fmt(i.remaining)} ج</td>
+              <td><span class="badge ${i.remaining<=0?'ok':'warn'}">${i.remaining<=0?'مسددة':'متبقي'}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
 }
 
 
