@@ -480,6 +480,7 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
 .att-status-btn:hover:not(:disabled){border-color:var(--ink-faint); color:var(--ink);}
 .att-status-btn.present.active{background:var(--ok); border-color:var(--ok); color:#fff;}
 .att-status-btn.absent.active{background:var(--warn); border-color:var(--warn); color:#fff;}
+.att-status-btn.friday.active{background:var(--indigo); border-color:var(--indigo); color:#fff;}
 .att-status-btn:disabled{opacity:.55; cursor:default;}
 .att-times{display:flex; gap:14px; flex-wrap:wrap;}
 .att-time-field{display:flex; flex-direction:column; gap:5px;}
@@ -701,6 +702,7 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
     <button class="tab-btn active" data-tab="models" onclick="switchMainTab('models')" id="modelsTabBtn">الموديلات <span class="count" id="tabCountModels">0</span></button>
     <button class="tab-btn" data-tab="month" onclick="switchMainTab('month')" id="monthTabBtn" style="display:none;">📅 الشهر والأرباح</button>
     <button class="tab-btn" data-tab="daily" onclick="switchMainTab('daily')" id="dailyTabBtn" style="display:none;">📥 إنتاج اليوم</button>
+    <button class="tab-btn" data-tab="treasury" onclick="switchMainTab('treasury')" id="treasuryTabBtn" style="display:none;">💰 الخزينة</button>
     <button class="tab-btn" data-tab="attendance" onclick="switchMainTab('attendance')" id="attendanceTabBtn" style="display:none;">🕒 الحضور والانصراف</button>
     <button class="tab-btn" data-tab="settings" onclick="switchMainTab('settings')">⚙️ إعدادات المصنع والتكاليف</button>
     <button class="tab-btn" data-tab="users" onclick="switchMainTab('users')" id="usersTabBtn" style="display:none;">👤 إدارة المستخدمين</button>
@@ -721,6 +723,8 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
   <section class="view" id="view-month"></section>
 
   <section class="view" id="view-daily"></section>
+
+  <section class="view" id="view-treasury"></section>
 
   <button class="fab" id="fabAdd" title="موديل جديد">+</button>
 </div>
@@ -760,6 +764,7 @@ const db = getFirestore(fbApp);
 const PERMISSION_SECTIONS = [
   {key:'models',  label:'الموديلات'},
   {key:'finance', label:'الحسابات المالية (أسعار/تكلفة/أرباح)'},
+  {key:'treasury', label:'الخزينة (حركة نقدية فعلية)'},
   {key:'employees', label:'الموظفين والمرتبات'},
   {key:'attendance', label:'الحضور والانصراف'},
   {key:'factory_settings', label:'إعدادات المصنع والتكاليف'},
@@ -836,6 +841,8 @@ onAuthStateChanged(auth, async (user)=>{
       (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? 'inline-flex' : 'none';
     document.getElementById('dailyTabBtn').style.display =
       (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? 'inline-flex' : 'none';
+    document.getElementById('treasuryTabBtn').style.display =
+      (window.currentPermissions.treasury==='view' || window.currentPermissions.treasury==='edit') ? 'inline-flex' : 'none';
     document.getElementById('statProfitWrap').style.display =
       (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? '' : 'none';
     showApp();
@@ -879,6 +886,11 @@ function migrateState(){
   if(!Array.isArray(state.hrAdvances)) state.hrAdvances = [];
   if(!Array.isArray(state.deductions)) state.deductions = [];
   if(!Array.isArray(state.deptSettings)) state.deptSettings = [];
+  if(!Array.isArray(state.treasury)) state.treasury = [];
+  if(!Array.isArray(state.debts)) state.debts = [];
+  if(!Array.isArray(state.suppliers)) state.suppliers = [];
+  if(!Array.isArray(state.supplierPayments)) state.supplierPayments = [];
+  if(!Array.isArray(state.miscExpenses)) state.miscExpenses = [];
   state.models.forEach(m=>{ if(!m.sewingOps) m.sewingOps = []; });
   state.factory.employees.forEach(e=>{
     if(!e.payType) e.payType = 'monthly';
@@ -1336,6 +1348,9 @@ function switchMainTab(tab){
   } else if(tab==='daily'){
     document.getElementById('view-daily').classList.add('active');
     renderDailyView();
+  } else if(tab==='treasury'){
+    document.getElementById('view-treasury').classList.add('active');
+    renderTreasuryView();
   } else {
     document.getElementById('view-settings').classList.add('active');
     renderSettingsView();
@@ -2610,6 +2625,7 @@ async function updateUserPermission(uid, sectionKey, newVal){
       document.getElementById('modelsTabBtn').style.display = (perms.models==='view' || perms.models==='edit') ? 'inline-flex' : 'none';
       document.getElementById('monthTabBtn').style.display = (perms.finance==='view' || perms.finance==='edit') ? 'inline-flex' : 'none';
       document.getElementById('dailyTabBtn').style.display = (perms.finance==='view' || perms.finance==='edit') ? 'inline-flex' : 'none';
+      document.getElementById('treasuryTabBtn').style.display = (perms.treasury==='view' || perms.treasury==='edit') ? 'inline-flex' : 'none';
       document.getElementById('statProfitWrap').style.display = (perms.finance==='view' || perms.finance==='edit') ? '' : 'none';
     }
   }catch(e){
@@ -2723,6 +2739,7 @@ function renderAttendanceDayPanel(){
           <div class="att-status-btns">
             <button class="att-status-btn present ${rec.status==='present'?'active':''}" ${!canEdit?'disabled':''} onclick="setAttendanceStatus('${emp.id}','present')">حاضر</button>
             <button class="att-status-btn absent ${rec.status==='absent'?'active':''}" ${!canEdit?'disabled':''} onclick="setAttendanceStatus('${emp.id}','absent')">غايب</button>
+            <button class="att-status-btn friday ${rec.type==='friday'?'active':''}" ${!canEdit?'disabled':''} onclick="toggleFridayPaid('${emp.id}')" title="جمعة مدفوعة">🕌 جمعة</button>
           </div>
           <div class="att-times" id="attTimes_${emp.id}" style="${rec.status==='present'?'':'display:none;'}">
             <div class="att-time-field">
@@ -2774,7 +2791,24 @@ function setAttendanceStatus(empId, status){
   if(!requireEdit('attendance','تسجيل الحضور')) return;
   const rec = ensureAttendanceSlot(empId);
   rec.status = status;
+  rec.type = null;
   if(status==='absent'){ rec.checkIn=''; rec.checkOut=''; }
+  saveState();
+  renderAttendanceDayPanel();
+  renderAttendanceView();
+}
+
+function toggleFridayPaid(empId){
+  if(!requireEdit('attendance','تسجيل الحضور')) return;
+  const rec = ensureAttendanceSlot(empId);
+  if(rec.type === 'friday'){
+    rec.type = null;
+    rec.status = null;
+  } else {
+    rec.type = 'friday';
+    rec.status = 'present';
+    rec.checkIn = ''; rec.checkOut = '';
+  }
   saveState();
   renderAttendanceDayPanel();
   renderAttendanceView();
@@ -3382,6 +3416,362 @@ function saveEditDayLog(id){
   if(document.getElementById('view-daily').classList.contains('active')) renderDailyView();
   else renderMonthView();
   toast('تم حفظ التعديل ✓');
+}
+
+/* ============================================================
+   الخزينة — حركة نقدية فعلية (داخل/خارج)، منفصلة عن التقديرات المالية
+============================================================ */
+function getTreasuryBalance(){
+  const list = state.treasury || [];
+  const totalIn = list.filter(t=>t.type==='in').reduce((s,t)=>s+(Number(t.amount)||0), 0);
+  const totalOut = list.filter(t=>t.type==='out').reduce((s,t)=>s+(Number(t.amount)||0), 0);
+  return {totalIn, totalOut, balance: totalIn - totalOut};
+}
+
+window._treasuryTab = 'moves';
+
+function renderTreasuryView(){
+  if(!hasPerm('treasury','view')){
+    document.getElementById('view-treasury').innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض الخزينة</div>`;
+    return;
+  }
+  const bal = getTreasuryBalance();
+  const subTabs = [
+    {k:'moves', l:'📋 الحركات'},
+    {k:'debts', l:'📄 الديون الخارجية'},
+    {k:'suppliers', l:'🏭 الموردين'},
+    {k:'misc', l:'💸 مصروفات نثرية'},
+  ];
+
+  document.getElementById('view-treasury').innerHTML = `
+    <div class="panel">
+      <h2><span class="title-txt">💰 الخزينة</span></h2>
+      <div class="cost-summary">
+        <div class="cost-item"><div class="lbl">إجمالي الداخل</div><div class="val" style="color:var(--ok);">${fmt(bal.totalIn)} ج</div></div>
+        <div class="cost-item"><div class="lbl">إجمالي الخارج</div><div class="val" style="color:var(--warn);">${fmt(bal.totalOut)} ج</div></div>
+        <div class="cost-item profit ${bal.balance<0?'negative':''}"><div class="lbl">الرصيد الحالي</div><div class="val">${fmt(bal.balance)} ج</div></div>
+      </div>
+    </div>
+    <div class="stage-tabs">
+      ${subTabs.map(t=>`<div class="stage-tab ${window._treasuryTab===t.k?'active':''}" onclick="switchTreasuryTab('${t.k}')">${t.l}</div>`).join('')}
+    </div>
+    <div id="treasurySubBody"></div>
+  `;
+  renderTreasurySubTab();
+}
+
+function switchTreasuryTab(tab){
+  window._treasuryTab = tab;
+  renderTreasuryView();
+}
+
+function renderTreasurySubTab(){
+  const el = document.getElementById('treasurySubBody');
+  if(!el) return;
+  if(window._treasuryTab === 'moves') el.innerHTML = renderTreasuryMovesTab();
+  else if(window._treasuryTab === 'debts') el.innerHTML = renderDebtsTab();
+  else if(window._treasuryTab === 'suppliers') el.innerHTML = renderSuppliersTab();
+  else if(window._treasuryTab === 'misc') el.innerHTML = renderMiscExpensesTab();
+}
+
+/* ---------- الحركات ---------- */
+function renderTreasuryMovesTab(){
+  const canEdit = hasPerm('treasury','edit');
+  const list = [...(state.treasury||[])].sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.createdAt||0)-(a.createdAt||0));
+  return `
+    ${canEdit ? `
+    <div class="panel">
+      <h2><span class="title-txt">➕ تسجيل حركة يدوية</span></h2>
+      <div class="form-grid">
+        <div class="field"><label>النوع</label>
+          <select id="tr_type">
+            <option value="in">داخل (استلام فلوس)</option>
+            <option value="out">خارج (دفع فلوس)</option>
+          </select>
+        </div>
+        <div class="field"><label>المبلغ (ج)</label><input type="number" id="tr_amount" placeholder="500"></div>
+        <div class="field"><label>البيان</label><input type="text" id="tr_desc" placeholder="مثال: دفعة من عميل / إيجار الشهر"></div>
+        <div class="field"><label>التاريخ</label><input type="date" id="tr_date" value="${todayStr()}"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addTreasuryEntry()">تسجيل الحركة</button>
+      <div class="hint" style="margin-top:8px;">ملحوظة: الحركات الناتجة عن سداد ديون أو دفعات موردين أو مصروفات نثرية بتتسجل هنا تلقائيًا من التابات التانية.</div>
+    </div>
+    ` : ''}
+    <div class="panel">
+      <h2><span class="title-txt">📋 سجل الحركات (${list.length})</span></h2>
+      ${list.length===0 ? `<div class="empty-state"><div class="icon">💰</div><p>مفيش حركات مسجّلة لسه.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>التاريخ</th><th>النوع</th><th>البيان</th><th>المبلغ</th>${canEdit?'<th></th>':''}</tr></thead>
+        <tbody>
+          ${list.map(t=>`
+            <tr>
+              <td>${t.date||''}</td>
+              <td><span class="badge ${t.type==='in'?'ok':'warn'}">${t.type==='in'?'داخل':'خارج'}</span></td>
+              <td>${escapeHtml(t.description||'—')}</td>
+              <td style="font-family:var(--mono); font-variant-numeric:tabular-nums;">${fmt(t.amount)} ج</td>
+              ${canEdit ? `<td><button class="icon-btn" onclick="deleteTreasuryEntry('${t.id}')">🗑</button></td>` : ''}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+function addTreasuryEntry(){
+  if(!requireEdit('treasury','تسجيل حركة خزينة')) return;
+  const type = document.getElementById('tr_type').value;
+  const amount = Number(document.getElementById('tr_amount').value)||0;
+  const description = document.getElementById('tr_desc').value.trim();
+  const date = document.getElementById('tr_date').value || todayStr();
+  if(amount<=0){ toast('⚠️ اكتب مبلغ أكبر من صفر'); return; }
+  if(!description){ toast('⚠️ اكتب بيان الحركة'); return; }
+  state.treasury.push({id:uid(), type, amount, description, date, createdAt:Date.now()});
+  saveState();
+  toast('✅ تم تسجيل الحركة');
+  renderTreasuryView();
+}
+
+/* ---------- الديون الخارجية ---------- */
+function renderDebtsTab(){
+  const canEdit = hasPerm('treasury','edit');
+  const debts = state.debts || [];
+  const totalOwedToUs = debts.filter(d=>d.direction==='owed_to_us').reduce((s,d)=>s+d.remaining, 0);
+  const totalWeOwe = debts.filter(d=>d.direction==='we_owe').reduce((s,d)=>s+d.remaining, 0);
+  return `
+    <div class="cost-summary" style="margin-bottom:18px;">
+      <div class="cost-item"><div class="lbl">ديون لينا (لسه ما استلمناهاش)</div><div class="val" style="color:var(--ok);">${fmt(totalOwedToUs)} ج</div></div>
+      <div class="cost-item"><div class="lbl">ديون علينا (لسه ما دفعناهاش)</div><div class="val" style="color:var(--warn);">${fmt(totalWeOwe)} ج</div></div>
+    </div>
+    ${canEdit ? `
+    <div class="panel">
+      <h2><span class="title-txt">➕ تسجيل دين جديد</span></h2>
+      <div class="form-grid">
+        <div class="field"><label>الاتجاه</label>
+          <select id="dbt_dir">
+            <option value="owed_to_us">لينا (هيدفعلنا)</option>
+            <option value="we_owe">علينا (لازم ندفعله)</option>
+          </select>
+        </div>
+        <div class="field"><label>الاسم</label><input type="text" id="dbt_name" placeholder="اسم الشخص/الجهة"></div>
+        <div class="field"><label>الموبايل (اختياري)</label><input type="text" id="dbt_mobile"></div>
+        <div class="field"><label>المبلغ (ج)</label><input type="number" id="dbt_amount" placeholder="1000"></div>
+        <div class="field"><label>ميعاد السداد (اختياري)</label><input type="date" id="dbt_due"></div>
+        <div class="field"><label>ملاحظة</label><input type="text" id="dbt_note"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addDebt()">تسجيل الدين</button>
+    </div>
+    ` : ''}
+    <div class="panel">
+      <h2><span class="title-txt">📄 قائمة الديون (${debts.length})</span></h2>
+      ${debts.length===0 ? `<div class="empty-state"><div class="icon">📄</div><p>مفيش ديون مسجّلة.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>الاسم</th><th>الاتجاه</th><th>الإجمالي</th><th>المتبقي</th><th>ميعاد السداد</th><th>حالة</th>${canEdit?'<th></th>':''}</tr></thead>
+        <tbody>
+          ${debts.map(d=>`
+            <tr>
+              <td>${escapeHtml(d.name)}${d.mobile?` <span class="hint">(${escapeHtml(d.mobile)})</span>`:''}</td>
+              <td><span class="badge ${d.direction==='owed_to_us'?'ok':'warn'}">${d.direction==='owed_to_us'?'لينا':'علينا'}</span></td>
+              <td>${fmt(d.amount)} ج</td>
+              <td style="color:${d.remaining>0?'var(--amber)':'var(--ok)'}; font-weight:600;">${fmt(d.remaining)} ج</td>
+              <td>${d.dueDate||'—'}</td>
+              <td>${d.remaining<=0?'<span class="badge ok">مسدد</span>':'<span class="badge warn">متبقي</span>'}</td>
+              ${canEdit ? `<td>${d.remaining>0?`<button class="icon-btn" title="سداد" onclick="openDebtPay('${d.id}')">💵</button>`:''}<button class="icon-btn" onclick="deleteDebt('${d.id}')">🗑</button></td>` : ''}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+function addDebt(){
+  if(!requireEdit('treasury','تسجيل دين')) return;
+  const direction = document.getElementById('dbt_dir').value;
+  const name = document.getElementById('dbt_name').value.trim();
+  const mobile = document.getElementById('dbt_mobile').value.trim();
+  const amount = Number(document.getElementById('dbt_amount').value)||0;
+  const dueDate = document.getElementById('dbt_due').value;
+  const note = document.getElementById('dbt_note').value.trim();
+  if(!name || amount<=0){ toast('⚠️ اكتب الاسم ومبلغ أكبر من صفر'); return; }
+  state.debts.push({id:uid(), direction, name, mobile, amount, remaining:amount, dueDate, note, date:todayStr(), payments:[]});
+  saveState();
+  toast('✅ تم تسجيل الدين');
+  renderTreasurySubTab();
+}
+
+async function openDebtPay(id){
+  if(!requireEdit('treasury','سداد دين')) return;
+  const debt = state.debts.find(d=>d.id===id);
+  if(!debt) return;
+  const amountStr = await promptDialog(`المبلغ المسدد (المتبقي ${fmt(debt.remaining)} ج):`, '', {title:'سداد دين', yes:'تسجيل'});
+  if(amountStr===null) return;
+  const amount = Number(amountStr)||0;
+  if(amount<=0 || amount>debt.remaining){ toast('⚠️ مبلغ غير صحيح'); return; }
+  debt.remaining -= amount;
+  debt.payments.push({amount, date:todayStr()});
+  state.treasury.push({
+    id:uid(), type: debt.direction==='owed_to_us' ? 'in' : 'out',
+    amount, description:(debt.direction==='owed_to_us'?'تحصيل دين من ':'سداد دين لـ')+debt.name,
+    date:todayStr(), createdAt:Date.now()
+  });
+  saveState();
+  toast('✅ تم تسجيل السداد');
+  renderTreasurySubTab();
+  renderTreasuryView();
+}
+
+async function deleteDebt(id){
+  if(!requireEdit('treasury','حذف دين')) return;
+  if(!await confirmDialog('هيتشال سجل الدين ده نهائياً.', {title:'حذف دين', yes:'احذف', danger:true})) return;
+  state.debts = state.debts.filter(d=>d.id!==id);
+  saveState();
+  renderTreasurySubTab();
+  toast('تم الحذف');
+}
+
+/* ---------- الموردين ---------- */
+function renderSuppliersTab(){
+  const canEdit = hasPerm('treasury','edit');
+  const suppliers = state.suppliers || [];
+  return `
+    ${canEdit ? `
+    <div class="panel">
+      <h2><span class="title-txt">➕ مورد جديد</span></h2>
+      <div class="form-grid">
+        <div class="field"><label>الاسم</label><input type="text" id="sup_name" placeholder="اسم المورد"></div>
+        <div class="field"><label>التصنيف</label><input type="text" id="sup_category" placeholder="مثال: أقمشة"></div>
+        <div class="field"><label>الموبايل</label><input type="text" id="sup_mobile"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addSupplier()">إضافة المورد</button>
+    </div>
+    ` : ''}
+    <div class="panel">
+      <h2><span class="title-txt">🏭 قائمة الموردين (${suppliers.length})</span></h2>
+      ${suppliers.length===0 ? `<div class="empty-state"><div class="icon">🏭</div><p>مفيش موردين مسجّلين.</p></div>` : suppliers.map(sup=>{
+        const pays = (state.supplierPayments||[]).filter(p=>p.supplierId===sup.id);
+        const total = pays.reduce((s,p)=>s+p.amount, 0);
+        return `
+        <div class="rate-card">
+          <div>
+            <div class="dept-name">${escapeHtml(sup.name)}</div>
+            <div class="dept-pct">${escapeHtml(sup.category||'')}${sup.mobile?' · '+escapeHtml(sup.mobile):''} — إجمالي الصرف: ${fmt(total)} ج</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            ${canEdit ? `<button class="btn ghost small" onclick="openSupplierPay('${sup.id}')">+ دفعة</button>` : ''}
+            ${canEdit ? `<button class="icon-btn" onclick="deleteSupplier('${sup.id}')">🗑</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function addSupplier(){
+  if(!requireEdit('treasury','إضافة مورد')) return;
+  const name = document.getElementById('sup_name').value.trim();
+  const category = document.getElementById('sup_category').value.trim();
+  const mobile = document.getElementById('sup_mobile').value.trim();
+  if(!name){ toast('⚠️ اكتب اسم المورد'); return; }
+  state.suppliers.push({id:uid(), name, category, mobile});
+  saveState();
+  toast('✅ تم إضافة المورد');
+  renderTreasurySubTab();
+}
+
+async function deleteSupplier(id){
+  if(!requireEdit('treasury','حذف مورد')) return;
+  if(!await confirmDialog('هيتشال المورد وكل سجل دفعاته.', {title:'حذف مورد', yes:'احذف', danger:true})) return;
+  state.suppliers = state.suppliers.filter(s=>s.id!==id);
+  state.supplierPayments = (state.supplierPayments||[]).filter(p=>p.supplierId!==id);
+  saveState();
+  renderTreasurySubTab();
+  toast('تم الحذف');
+}
+
+async function openSupplierPay(supplierId){
+  if(!requireEdit('treasury','دفعة مورد')) return;
+  const sup = state.suppliers.find(s=>s.id===supplierId);
+  if(!sup) return;
+  const amountStr = await promptDialog(`مبلغ الدفعة لـ ${sup.name} (ج):`, '', {title:'دفعة مورد', yes:'تسجيل'});
+  if(amountStr===null) return;
+  const amount = Number(amountStr)||0;
+  if(amount<=0){ toast('⚠️ مبلغ غير صحيح'); return; }
+  state.supplierPayments.push({id:uid(), supplierId, amount, date:todayStr()});
+  state.treasury.push({id:uid(), type:'out', amount, description:'مشتريات من '+sup.name, date:todayStr(), createdAt:Date.now()});
+  saveState();
+  toast('✅ تم تسجيل الدفعة');
+  renderTreasurySubTab();
+  renderTreasuryView();
+}
+
+/* ---------- المصروفات النثرية ---------- */
+function renderMiscExpensesTab(){
+  const canEdit = hasPerm('treasury','edit');
+  const list = [...(state.miscExpenses||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const total = list.reduce((s,e)=>s+(Number(e.amount)||0), 0);
+  return `
+    ${canEdit ? `
+    <div class="panel">
+      <h2><span class="title-txt">💸 مصروف نثري جديد</span></h2>
+      <div class="form-grid">
+        <div class="field"><label>البيان</label><input type="text" id="misc_desc" placeholder="مثال: أدوات مكتبية"></div>
+        <div class="field"><label>المبلغ (ج)</label><input type="number" id="misc_amount" placeholder="100"></div>
+        <div class="field"><label>التاريخ</label><input type="date" id="misc_date" value="${todayStr()}"></div>
+      </div>
+      <button class="btn brass" style="margin-top:12px;" onclick="addMiscExpense()">تسجيل المصروف</button>
+    </div>
+    ` : ''}
+    <div class="panel">
+      <h2><span class="title-txt">📋 سجل المصروفات النثرية — إجمالي ${fmt(total)} ج</span></h2>
+      ${list.length===0 ? `<div class="empty-state"><div class="icon">💸</div><p>مفيش مصروفات نثرية مسجّلة.</p></div>` : `
+      <table class="data-table">
+        <thead><tr><th>التاريخ</th><th>البيان</th><th>المبلغ</th>${canEdit?'<th></th>':''}</tr></thead>
+        <tbody>
+          ${list.map(e=>`
+            <tr>
+              <td>${e.date||''}</td>
+              <td>${escapeHtml(e.description)}</td>
+              <td>${fmt(e.amount)} ج</td>
+              ${canEdit ? `<td><button class="icon-btn" onclick="deleteMiscExpense('${e.id}')">🗑</button></td>` : ''}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+}
+
+function addMiscExpense(){
+  if(!requireEdit('treasury','تسجيل مصروف نثري')) return;
+  const description = document.getElementById('misc_desc').value.trim();
+  const amount = Number(document.getElementById('misc_amount').value)||0;
+  const date = document.getElementById('misc_date').value || todayStr();
+  if(!description || amount<=0){ toast('⚠️ اكتب البيان ومبلغ أكبر من صفر'); return; }
+  state.miscExpenses.push({id:uid(), description, amount, date});
+  state.treasury.push({id:uid(), type:'out', amount, description:'مصروف: '+description, date, createdAt:Date.now()});
+  saveState();
+  toast('✅ تم تسجيل المصروف');
+  renderTreasurySubTab();
+  renderTreasuryView();
+}
+
+async function deleteMiscExpense(id){
+  if(!requireEdit('treasury','حذف مصروف')) return;
+  if(!await confirmDialog('هيتشال المصروف ده نهائياً.', {title:'حذف مصروف', yes:'احذف', danger:true})) return;
+  state.miscExpenses = (state.miscExpenses||[]).filter(e=>e.id!==id);
+  saveState();
+  renderTreasurySubTab();
+  toast('تم الحذف');
+}
+
+async function deleteTreasuryEntry(id){
+  if(!requireEdit('treasury','حذف حركة خزينة')) return;
+  if(!await confirmDialog('هيتشال سجل الحركة ده نهائياً.', {title:'حذف حركة خزينة', yes:'احذف', danger:true})) return;
+  state.treasury = state.treasury.filter(t=>t.id!==id);
+  saveState();
+  renderTreasuryView();
+  toast('تم الحذف');
 }
 
 
