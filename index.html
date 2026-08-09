@@ -494,6 +494,138 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
   outline:none; border-color:var(--indigo); box-shadow:0 0 0 3px var(--indigo-tint);
 }
 
+/* ===== الشهر والأرباح: التقويم ===== */
+.cal-toolbar{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:14px; flex-wrap:wrap; margin-bottom:18px;
+}
+.month-nav{display:flex; align-items:center; gap:10px;}
+.month-nav button{
+  width:38px; height:38px; border-radius:50%; border:1.5px solid var(--line-strong);
+  background:var(--surface); cursor:pointer; font-size:16px; color:var(--ink-soft);
+  display:flex; align-items:center; justify-content:center; transition:all .15s;
+}
+.month-nav button:hover{border-color:var(--indigo); color:var(--indigo);}
+.mlabel{font-size:16px; font-weight:700; min-width:120px; text-align:center;}
+.seg{display:flex; gap:6px; flex-wrap:wrap;}
+.seg button{
+  padding:8px 16px; min-height:38px; border-radius:999px; border:1.5px solid var(--line-strong);
+  background:var(--surface); font-size:13px; font-weight:600; color:var(--ink-soft);
+  cursor:pointer; font-family:inherit; transition:all .15s;
+}
+.seg button:hover{border-color:var(--line-strong); color:var(--ink);}
+.seg button.on{background:var(--indigo); border-color:var(--indigo); color:#fff;}
+
+.mini-note{
+  background:var(--indigo-soft); border-right:3px solid var(--indigo);
+  border-radius:var(--radius-sm); padding:14px 16px; margin:16px 0;
+  font-size:13.5px; line-height:1.8; color:var(--ink-soft);
+}
+.mini-note.warn{background:var(--amber-soft); border-right-color:var(--amber);}
+
+.dept-tiles{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:14px; margin-top:18px;}
+.dept-tile{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:16px;
+}
+.dt-name{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  font-weight:700; font-size:14.5px; margin-bottom:10px;
+}
+.dt-row{
+  display:flex; justify-content:space-between; gap:10px;
+  font-size:12.5px; padding:5px 0; color:var(--ink-soft);
+}
+.dt-row b{color:var(--ink); font-family:var(--mono); font-variant-numeric:tabular-nums;}
+.dt-row b.pos{color:var(--ok);}
+.dt-row b.neg{color:var(--warn);}
+.dt-row b.idle{color:var(--amber);}
+.util-bar{height:7px; background:var(--line); border-radius:999px; overflow:hidden; margin-top:10px;}
+.util-bar i{display:block; height:100%; border-radius:999px; transition:width .3s;}
+
+.cal-grid{
+  display:grid; grid-template-columns:repeat(7, 1fr); gap:6px;
+}
+.cal-hd{
+  text-align:center; font-size:11.5px; font-weight:700; color:var(--ink-faint);
+  padding:6px 0;
+}
+.cal-day{
+  min-height:72px; border:1px solid var(--line); border-radius:10px;
+  padding:7px 8px; cursor:pointer; background:var(--surface);
+  display:flex; flex-direction:column; gap:2px; transition:all .14s;
+}
+.cal-day:hover{border-color:var(--line-strong);}
+.cal-day.blank{border:none; background:transparent; cursor:default;}
+.cal-day.today{border-color:var(--indigo); border-width:2px;}
+.cal-day.sel{background:var(--indigo-soft); border-color:var(--indigo);}
+.cal-day.pos{background:#F3FAF7;}
+.cal-day.neg{background:#FDF4F3;}
+.dnum{font-size:12.5px; font-weight:700; color:var(--ink-soft);}
+.dnet{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12px; font-weight:700;}
+.dnet.pos{color:var(--ok);}
+.dnet.neg{color:var(--warn);}
+.dsub{font-size:10px; color:var(--ink-faint);}
+.plan{font-size:10px; color:var(--indigo); margin-top:auto;}
+.ubar{height:3px; background:var(--line); border-radius:999px; overflow:hidden; margin-top:auto;}
+.ubar i{display:block; height:100%;}
+
+.cal-legend{
+  display:flex; gap:16px; flex-wrap:wrap; margin-top:14px;
+  font-size:12px; color:var(--ink-faint);
+}
+.cal-legend span{display:flex; align-items:center; gap:6px;}
+.cal-legend i{
+  width:12px; height:12px; border-radius:4px; border:1px solid var(--line-strong); display:inline-block;
+}
+
+/* ===== الرسوم البيانية ===== */
+.chart-box{margin-bottom:24px;}
+.chart-box:last-child{margin-bottom:0;}
+.chart-box h3{font-size:14.5px; font-weight:700; margin-bottom:5px;}
+.csub{font-size:12.5px; color:var(--ink-faint); margin-bottom:12px; line-height:1.7;}
+.chart-empty{
+  padding:36px 20px; text-align:center; color:var(--ink-faint); font-size:13.5px;
+  background:var(--surface-2); border-radius:var(--radius-sm);
+}
+.chart-legend{
+  display:flex; gap:16px; flex-wrap:wrap; margin-top:10px;
+  font-size:12px; color:var(--ink-soft);
+}
+.chart-legend span{display:flex; align-items:center; gap:6px;}
+.chart-legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+.chart-legend i.line{height:3px; width:16px; border-radius:2px;}
+
+.hbar-row{margin-bottom:16px;}
+.hbar-row:last-child{margin-bottom:0;}
+.hbar-head{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:10px; margin-bottom:6px; font-size:13px;
+}
+.hbar-head span{font-size:12px; color:var(--ink-faint);}
+.hbar{
+  display:flex; height:26px; border-radius:8px; overflow:hidden;
+  background:var(--surface-2); border:1px solid var(--line);
+}
+.hbar i{
+  display:flex; align-items:center; justify-content:center;
+  font-size:10.5px; font-weight:700; color:#fff; font-family:var(--mono);
+  white-space:nowrap; overflow:hidden;
+}
+.hbar i.worked{background:var(--ok);}
+.hbar i.idle{background:var(--amber);}
+
+/* ===== لوحات الإنتاج اليومي ===== */
+.day-entry-box{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:16px 18px; margin-bottom:14px;
+}
+.day-entry-box:last-child{margin-bottom:0;}
+.deb-head{
+  display:flex; justify-content:space-between; align-items:center;
+  gap:10px; margin-bottom:12px; font-weight:700; font-size:14px;
+}
+
 /* ===== الموبايل ===== */
 @media (max-width:760px){
   body{font-size:14.5px;}
@@ -566,7 +698,9 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
   </header>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="models" onclick="switchMainTab('models')">الموديلات <span class="count" id="tabCountModels">0</span></button>
+    <button class="tab-btn active" data-tab="models" onclick="switchMainTab('models')" id="modelsTabBtn">الموديلات <span class="count" id="tabCountModels">0</span></button>
+    <button class="tab-btn" data-tab="month" onclick="switchMainTab('month')" id="monthTabBtn" style="display:none;">📅 الشهر والأرباح</button>
+    <button class="tab-btn" data-tab="daily" onclick="switchMainTab('daily')" id="dailyTabBtn" style="display:none;">📥 إنتاج اليوم</button>
     <button class="tab-btn" data-tab="attendance" onclick="switchMainTab('attendance')" id="attendanceTabBtn" style="display:none;">🕒 الحضور والانصراف</button>
     <button class="tab-btn" data-tab="settings" onclick="switchMainTab('settings')">⚙️ إعدادات المصنع والتكاليف</button>
     <button class="tab-btn" data-tab="users" onclick="switchMainTab('users')" id="usersTabBtn" style="display:none;">👤 إدارة المستخدمين</button>
@@ -584,12 +718,18 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
 
   <section class="view" id="view-attendance"></section>
 
+  <section class="view" id="view-month"></section>
+
+  <section class="view" id="view-daily"></section>
+
   <button class="fab" id="fabAdd" title="موديل جديد">+</button>
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modalContent"></div>
 </div>
+
+<div class="edit-modal-overlay" id="dialogOverlay"></div>
 
 <div class="toast" id="toast"></div>
 
@@ -690,6 +830,12 @@ onAuthStateChanged(auth, async (user)=>{
       (window.currentPermissions.users==='edit') ? 'inline-block' : 'none';
     document.getElementById('attendanceTabBtn').style.display =
       (window.currentPermissions.attendance==='view' || window.currentPermissions.attendance==='edit') ? 'inline-block' : 'none';
+    document.getElementById('modelsTabBtn').style.display =
+      (window.currentPermissions.models==='view' || window.currentPermissions.models==='edit') ? 'inline-flex' : 'none';
+    document.getElementById('monthTabBtn').style.display =
+      (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? 'inline-flex' : 'none';
+    document.getElementById('dailyTabBtn').style.display =
+      (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? 'inline-flex' : 'none';
     document.getElementById('statProfitWrap').style.display =
       (window.currentPermissions.finance==='view' || window.currentPermissions.finance==='edit') ? '' : 'none';
     showApp();
@@ -709,23 +855,35 @@ onAuthStateChanged(auth, async (user)=>{
 const STORAGE_KEY = 'factory_tracker_v2';
 let state = {
   models: [],
+  dayLogs: [],   // {id, date:'YYYY-MM-DD', dept, modelId, qty, hours, revenue, note}
+  schedule: [],  // {id, modelId, dept, date, hours, note}
   factory: {
     rent: 0,
     electricity: 0,
     workHoursPerDay: 9,
     workDaysPerMonth: 26,
+    deptCapacity: {}, // تخصيص طاقة يومية لقسم معين (اختياري)
     employees: [] // {id, name, dept, salary}
   },
   attendance: {} // { "YYYY-MM": { "YYYY-MM-DD": { empId: {status:'present'|'absent', checkIn, checkOut} } } }
 };
 
+function migrateState(){
+  if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
+  if(!state.factory.employees) state.factory.employees = [];
+  if(!state.factory.deptCapacity) state.factory.deptCapacity = {};
+  if(!Array.isArray(state.dayLogs)) state.dayLogs = [];
+  if(!Array.isArray(state.schedule)) state.schedule = [];
+  if(!Array.isArray(state.models)) state.models = [];
+  if(!state.attendance) state.attendance = {};
+  state.models.forEach(m=>{ if(!m.sewingOps) m.sewingOps = []; });
+}
+
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw) state = JSON.parse(raw);
-    if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
-    if(!state.factory.employees) state.factory.employees = [];
-    if(!state.attendance) state.attendance = {};
+    migrateState();
   }catch(e){ console.error('فشل تحميل البيانات', e); }
 }
 function saveState(){
@@ -754,9 +912,7 @@ async function loadStateFromCloud(){
     const snap = await window._fsget(window._FACTORY_DOC_REF());
     if(snap.exists() && snap.data().data){
       state = JSON.parse(snap.data().data);
-      if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
-      if(!state.factory.employees) state.factory.employees = [];
-      if(!state.attendance) state.attendance = {};
+      migrateState();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
   }catch(e){
@@ -811,44 +967,53 @@ function escapeHtml(s){ const d = document.createElement('div'); d.textContent =
 /* ============================================================
    حساب تكلفة الساعة لكل قسم داخلي
 ============================================================ */
-function getMonthlyHours(){
-  const h = Number(state.factory.workHoursPerDay)||9;
-  const d = Number(state.factory.workDaysPerMonth)||26;
+function getMonthlyHoursFor(factoryCtx){
+  const h = Number(factoryCtx.workHoursPerDay)||9;
+  const d = Number(factoryCtx.workDaysPerMonth)||26;
   return h*d;
 }
+function getMonthlyHours(){ return getMonthlyHoursFor(state.factory); }
 
 /* نصيب قسم معيّن من مرتبات موظفي الإشراف، حسب النسبة المخصصة لكل موظف */
-function getSupervisionShareForDept(deptKey){
-  return state.factory.employees
+function getSupervisionShareForDeptFor(deptKey, factoryCtx){
+  return (factoryCtx.employees||[])
     .filter(e=>e.dept===SUPERVISION_DEPT.key)
     .reduce((s,e)=>{
       const pct = Number(e.splits?.[deptKey])||0;
       return s + (Number(e.salary)||0) * pct;
     }, 0);
 }
+function getSupervisionShareForDept(deptKey){ return getSupervisionShareForDeptFor(deptKey, state.factory); }
 
-function getDeptHourlyRate(deptKey){
+function getDeptHourlyRateFor(deptKey, factoryCtx){
   const dept = INTERNAL_DEPTS.find(d=>d.key===deptKey);
   if(!dept) return 0;
-  const fixedShare = ((Number(state.factory.rent)||0) + (Number(state.factory.electricity)||0)) * dept.pct;
-  const directSalaries = state.factory.employees
+  const fixedShare = ((Number(factoryCtx.rent)||0) + (Number(factoryCtx.electricity)||0)) * dept.pct;
+  const directSalaries = (factoryCtx.employees||[])
     .filter(e=>e.dept===deptKey)
     .reduce((s,e)=>s+(Number(e.salary)||0), 0);
-  const supervisionShare = getSupervisionShareForDept(deptKey);
-  const monthlyHours = getMonthlyHours();
+  const supervisionShare = getSupervisionShareForDeptFor(deptKey, factoryCtx);
+  const monthlyHours = getMonthlyHoursFor(factoryCtx);
   if(monthlyHours<=0) return 0;
   return (fixedShare + directSalaries + supervisionShare) / monthlyHours;
 }
+function getDeptHourlyRate(deptKey){ return getDeptHourlyRateFor(deptKey, state.factory); }
 
-function getDeptMonthlyCost(deptKey){
+function getDeptMonthlyCostFor(deptKey, factoryCtx){
   const dept = INTERNAL_DEPTS.find(d=>d.key===deptKey);
   if(!dept) return {fixedShare:0, salariesShare:0, supervisionShare:0, total:0};
-  const fixedShare = ((Number(state.factory.rent)||0) + (Number(state.factory.electricity)||0)) * dept.pct;
-  const directSalaries = state.factory.employees
+  const fixedShare = ((Number(factoryCtx.rent)||0) + (Number(factoryCtx.electricity)||0)) * dept.pct;
+  const directSalaries = (factoryCtx.employees||[])
     .filter(e=>e.dept===deptKey)
     .reduce((s,e)=>s+(Number(e.salary)||0), 0);
-  const supervisionShare = getSupervisionShareForDept(deptKey);
+  const supervisionShare = getSupervisionShareForDeptFor(deptKey, factoryCtx);
   return {fixedShare, salariesShare:directSalaries, supervisionShare, total:fixedShare+directSalaries+supervisionShare};
+}
+function getDeptMonthlyCost(deptKey){ return getDeptMonthlyCostFor(deptKey, state.factory); }
+
+function getFactoryContextFor(m){
+  if(m && m.status==='closed' && m.closedSnapshot) return m.closedSnapshot;
+  return state.factory;
 }
 
 /* ============================================================
@@ -856,9 +1021,11 @@ function getDeptMonthlyCost(deptKey){
 ============================================================ */
 function switchMainTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+  const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+  if(btn) btn.classList.add('active');
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   currentModelId = null;
+  currentSewingOpIndex = null; currentSewingWorkerId = null;
   if(tab==='models'){
     document.getElementById('view-models').classList.add('active');
     renderModelGrid();
@@ -868,6 +1035,12 @@ function switchMainTab(tab){
   } else if(tab==='attendance'){
     document.getElementById('view-attendance').classList.add('active');
     renderAttendanceView();
+  } else if(tab==='month'){
+    document.getElementById('view-month').classList.add('active');
+    renderMonthView();
+  } else if(tab==='daily'){
+    document.getElementById('view-daily').classList.add('active');
+    renderDailyView();
   } else {
     document.getElementById('view-settings').classList.add('active');
     renderSettingsView();
@@ -876,6 +1049,16 @@ function switchMainTab(tab){
 
 function renderModelGrid(){
   const grid = document.getElementById('modelGrid');
+  const fab = document.getElementById('fabAdd');
+  if(!hasPerm('models','view')){
+    grid.innerHTML = `<div class="locked-msg" style="grid-column:1/-1;">🚫 مفيش صلاحية لعرض الموديلات</div>`;
+    document.getElementById('tabCountModels').textContent = '0';
+    document.getElementById('statModels').textContent = '0';
+    if(fab) fab.style.display = 'none';
+    return;
+  }
+  if(fab) fab.style.display = hasPerm('models','edit') ? 'flex' : 'none';
+
   document.getElementById('tabCountModels').textContent = state.models.length;
   document.getElementById('statModels').textContent = state.models.length;
 
@@ -985,6 +1168,164 @@ function calcModelCost(m){
   const profitPerUnit = (Number(m.sellPrice)||0) - costPerUnit;
 
   return { revenue, totalCost, profit, costPerUnit, profitPerUnit, stageDetails };
+}
+
+/* ============================================================
+   محرك اليوم والشهر: الإنتاج، الهدر، المكسب والخسارة لكل قسم
+============================================================ */
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const AR_WEEK = ['السبت','الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+
+function ymd(y, mIdx, d){
+  return `${y}-${String(mIdx+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function getDeptDailyCapacity(deptKey){
+  const custom = Number((state.factory.deptCapacity||{})[deptKey]);
+  if(custom > 0) return custom;
+  return Number(state.factory.workHoursPerDay) || 9;
+}
+
+function isWorkDay(dateStr){
+  return (state.dayLogs||[]).some(l => l.date === dateStr);
+}
+
+function getDayDeptStats(dateStr, deptKey){
+  const logs = (state.dayLogs||[]).filter(l => l.date===dateStr && l.dept===deptKey);
+  const active = isWorkDay(dateStr);
+  const capacity = active ? getDeptDailyCapacity(deptKey) : 0;
+  const rate = getDeptHourlyRate(deptKey);
+  const workedHours = logs.reduce((s,l)=>s+(Number(l.hours)||0), 0);
+  const revenue = logs.reduce((s,l)=>s+(Number(l.revenue)||0), 0);
+  const qty = logs.reduce((s,l)=>s+(Number(l.qty)||0), 0);
+  const idleHours = Math.max(0, capacity - workedHours);
+  const overHours = Math.max(0, workedHours - capacity);
+  const billedHours = active ? Math.max(capacity, workedHours) : 0;
+  const cost = billedHours * rate;
+  const idleCost = idleHours * rate;
+  return {
+    date:dateStr, dept:deptKey, logs, active, capacity, rate,
+    workedHours, idleHours, overHours, billedHours,
+    cost, idleCost, revenue, qty,
+    profit: revenue - cost,
+    utilization: capacity>0 ? (workedHours/capacity*100) : 0
+  };
+}
+
+function getDayStats(dateStr, deptKey){
+  if(deptKey && deptKey !== 'all') return getDayDeptStats(dateStr, deptKey);
+  const parts = INTERNAL_DEPTS.map(d => getDayDeptStats(dateStr, d.key));
+  const sum = k => parts.reduce((s,p)=>s+p[k], 0);
+  const capacity = sum('capacity');
+  return {
+    date:dateStr, dept:'all', parts, logs: parts.flatMap(p=>p.logs),
+    active: isWorkDay(dateStr), capacity, rate:null,
+    workedHours: sum('workedHours'), idleHours: sum('idleHours'), overHours: sum('overHours'),
+    billedHours: sum('billedHours'), cost: sum('cost'), idleCost: sum('idleCost'),
+    revenue: sum('revenue'), qty: sum('qty'), profit: sum('revenue') - sum('cost'),
+    utilization: capacity>0 ? (sum('workedHours')/capacity*100) : 0
+  };
+}
+
+function getMonthStats(y, mIdx, deptKey){
+  const days = new Date(y, mIdx+1, 0).getDate();
+  const list = [];
+  for(let d=1; d<=days; d++) list.push(getDayStats(ymd(y,mIdx,d), deptKey));
+  const sum = k => list.reduce((s,p)=>s+(p[k]||0), 0);
+  const workedDays = list.filter(p=>p.active).length;
+  const capacity = sum('capacity');
+  return {
+    days, list, workedDays,
+    capacity, workedHours: sum('workedHours'), idleHours: sum('idleHours'),
+    cost: sum('cost'), idleCost: sum('idleCost'), revenue: sum('revenue'),
+    qty: sum('qty'), profit: sum('revenue') - sum('cost'),
+    utilization: capacity>0 ? (sum('workedHours')/capacity*100) : 0
+  };
+}
+
+function getSchedFor(dateStr, deptKey){
+  return (state.schedule||[]).filter(sc =>
+    sc.date === dateStr && (!deptKey || deptKey==='all' || sc.dept===deptKey));
+}
+
+function modelName(id){
+  const m = state.models.find(x=>x.id===id);
+  return m ? m.name : '(موديل محذوف)';
+}
+function deptLabel(key){
+  const d = INTERNAL_DEPTS.find(x=>x.key===key);
+  return d ? d.label : key;
+}
+
+function suggestRevenue(modelId, deptKey, qty){
+  const m = state.models.find(x=>x.id===modelId);
+  if(!m || !qty) return 0;
+  const planned = m.stagesPlanned || [];
+  if(planned.length === 0) return 0;
+  const costs = planned.map(sp=>{
+    if(INTERNAL_DEPTS.some(d=>d.key===sp.key)) return getDeptHourlyRate(sp.key) * (Number(sp.expectedTime)||0);
+    return Number(sp.expectedCost)||0;
+  });
+  const total = costs.reduce((a,b)=>a+b, 0);
+  const idx = planned.findIndex(sp=>sp.key===deptKey);
+  if(idx < 0 || total <= 0) return 0;
+  const shareRatio = costs[idx] / total;
+  return (Number(m.sellPrice)||0) * qty * shareRatio;
+}
+
+function formatDateArabic(dateStr){
+  if(!dateStr) return '';
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  const weekday = AR_WEEK[(dt.getDay()+1)%7];
+  return `${weekday} ${d} ${AR_MONTHS[m-1]} ${y}`;
+}
+
+/* ============================================================
+   مربعات حوار مخصصة (تأكيد / إدخال نص) بدل confirm()/prompt() القياسية
+============================================================ */
+let _dialogResolve = null;
+function _closeDialog(val){
+  document.getElementById('dialogOverlay').classList.remove('active');
+  document.getElementById('dialogOverlay').style.display = 'none';
+  if(_dialogResolve) _dialogResolve(val);
+  _dialogResolve = null;
+}
+function confirmDialog(message, opts){
+  opts = opts || {};
+  return new Promise(resolve=>{
+    _dialogResolve = resolve;
+    document.getElementById('dialogOverlay').innerHTML = `
+      <div class="modal-box" style="max-width:380px;">
+        <h3 style="margin-bottom:10px;">${escapeHtml(opts.title||'تأكيد')}</h3>
+        <p style="font-size:14px; color:var(--ink-soft); margin-bottom:20px; line-height:1.7;">${escapeHtml(message)}</p>
+        <div style="display:flex; gap:8px;">
+          <button class="btn ${opts.danger?'danger':'brass'}" style="flex:1;" onclick="_closeDialog(true)">${escapeHtml(opts.yes||'تأكيد')}</button>
+          <button class="btn ghost" style="flex:1;" onclick="_closeDialog(false)">${escapeHtml(opts.no||'إلغاء')}</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('dialogOverlay').style.display = 'flex';
+  });
+}
+function promptDialog(message, defaultValue, opts){
+  opts = opts || {};
+  return new Promise(resolve=>{
+    _dialogResolve = resolve;
+    document.getElementById('dialogOverlay').innerHTML = `
+      <div class="modal-box" style="max-width:380px;">
+        <h3 style="margin-bottom:10px;">${escapeHtml(opts.title||'إدخال')}</h3>
+        <p style="font-size:14px; color:var(--ink-soft); margin-bottom:12px;">${escapeHtml(message)}</p>
+        <input type="text" id="dialogPromptInput" value="${escapeHtml(defaultValue||'')}" style="width:100%; padding:11px 14px; min-height:44px; border:1.5px solid var(--line-strong); border-radius:10px; font-family:inherit; font-size:15px; margin-bottom:16px;">
+        <div style="display:flex; gap:8px;">
+          <button class="btn brass" style="flex:1;" onclick="_closeDialog(document.getElementById('dialogPromptInput').value)">${escapeHtml(opts.yes||'تأكيد')}</button>
+          <button class="btn ghost" style="flex:1;" onclick="_closeDialog(null)">${escapeHtml(opts.no||'إلغاء')}</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('dialogOverlay').style.display = 'flex';
+    setTimeout(()=>{ const inp=document.getElementById('dialogPromptInput'); if(inp){ inp.focus(); inp.select(); } }, 50);
+  });
 }
 
 /* ============================================================
@@ -1298,6 +1639,7 @@ function saveEditedEmployee(){
    إضافة موديل جديد
 ============================================================ */
 function openAddModelModal(){
+  if(!requireEdit('models','إضافة موديل')) return;
   const html = `
     <button class="modal-close" onclick="closeModal()">✕</button>
     <h3>موديل جديد</h3>
@@ -1404,6 +1746,7 @@ function updateColorSizeTotal(colorIdx){
 }
 
 function saveNewModel(){
+  if(!requireEdit('models','إضافة موديل')) return;
   const name = document.getElementById('nm_name').value.trim();
   const price = Number(document.getElementById('nm_price').value);
   const expected = Number(document.getElementById('nm_expected').value);
@@ -1449,7 +1792,7 @@ function saveNewModel(){
 
   const model = {
     id: uid(), name, sellPrice:price, expectedTotal:expected,
-    colors, stagesPlanned, cutParts:[], stageLogs, createdAt: Date.now()
+    colors, stagesPlanned, cutParts:[], stageLogs, sewingOps:[], createdAt: Date.now()
   };
   state.models.push(model);
   saveState();
@@ -1469,6 +1812,8 @@ function closeModal(){
 ============================================================ */
 let currentModelId = null;
 let currentDetailTab = 'overview';
+let currentSewingOpIndex = null;
+let currentSewingWorkerId = null;
 
 function openModelDetail(id){
   currentModelId = id;
@@ -1935,6 +2280,9 @@ async function updateUserPermission(uid, sectionKey, newVal){
       window.currentPermissions = perms;
       document.getElementById('usersTabBtn').style.display = (perms.users==='edit') ? 'inline-block' : 'none';
       document.getElementById('attendanceTabBtn').style.display = (perms.attendance==='view' || perms.attendance==='edit') ? 'inline-block' : 'none';
+      document.getElementById('modelsTabBtn').style.display = (perms.models==='view' || perms.models==='edit') ? 'inline-flex' : 'none';
+      document.getElementById('monthTabBtn').style.display = (perms.finance==='view' || perms.finance==='edit') ? 'inline-flex' : 'none';
+      document.getElementById('dailyTabBtn').style.display = (perms.finance==='view' || perms.finance==='edit') ? 'inline-flex' : 'none';
       document.getElementById('statProfitWrap').style.display = (perms.finance==='view' || perms.finance==='edit') ? '' : 'none';
     }
   }catch(e){
@@ -2114,10 +2462,589 @@ function saveAttendanceTime(empId){
   renderAttendanceView();
 }
 
+/* ============================================================
+   الرسوم البيانية الشهرية (SVG بسيط، بدون مكتبات خارجية)
+============================================================ */
+function chartEmpty(msg){
+  return `<div class="chart-empty">${escapeHtml(msg)}</div>`;
+}
+
+function chartDailyNet(ms){
+  const n = ms.days;
+  const active = ms.list.filter(p=>p.active);
+  if(active.length === 0) return chartEmpty('مفيش أي إنتاج مسجل في الشهر ده لسه، فمفيش حاجة تترسم.');
+
+  const W = 720, H = 200, padX = 10, padT = 18, padB = 30;
+  const plotH = H - padT - padB;
+  const vals = active.map(p=>p.profit);
+  const maxV = Math.max(0, ...vals);
+  const minV = Math.min(0, ...vals);
+  const range = (maxV - minV) || 1;
+  const yOf = v => padT + plotH * (maxV - v) / range;
+  const zeroY = yOf(0);
+  const slot = (W - 2*padX) / n;
+  const bw = Math.max(2, slot * 0.62);
+  const xOf = i => W - padX - (i + 0.5) * slot;
+
+  let bars = '', labels = '';
+  ms.list.forEach((p, i)=>{
+    const cx = xOf(i);
+    if(p.active){
+      const y = yOf(p.profit);
+      const top = Math.min(y, zeroY);
+      const h = Math.max(1.5, Math.abs(y - zeroY));
+      const col = p.profit >= 0 ? 'var(--ok)' : 'var(--warn)';
+      bars += `<rect x="${(cx-bw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${col}">`
+           +  `<title>${i+1} ${AR_MONTHS[calM]} — صافي ${fmt(p.profit)} ج (شغل ${fmt(p.workedHours)} س من ${fmt(p.capacity)} س)</title></rect>`;
+    }
+    if((i+1) % 5 === 0 || i === 0){
+      labels += `<text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="10.5" fill="#8B95A1">${i+1}</text>`;
+    }
+  });
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="صافي الربح لكل يوم في الشهر">
+      <line x1="${padX}" y1="${padT}" x2="${W-padX}" y2="${padT}" stroke="#dce4eb" stroke-width="1" stroke-dasharray="3 4"/>
+      ${bars}
+      <line x1="${padX}" y1="${zeroY.toFixed(1)}" x2="${W-padX}" y2="${zeroY.toFixed(1)}" stroke="#b6c4d1" stroke-width="1.5"/>
+      ${labels}
+      <text x="${W-padX}" y="${padT-5}" text-anchor="end" font-size="10.5" fill="#8B95A1">${fmt(maxV)} ج</text>
+      ${minV < 0 ? `<text x="${W-padX}" y="${H-padB+13}" text-anchor="end" font-size="10.5" fill="var(--warn)">${fmt(minV)} ج</text>` : ''}
+    </svg>
+    <div class="chart-legend">
+      <span><i style="background:var(--ok)"></i> يوم ربح</span>
+      <span><i style="background:var(--warn)"></i> يوم خسارة</span>
+      <span>حط صباعك على أي عمود يوريك تفاصيله</span>
+    </div>`;
+}
+
+function chartCumulative(ms){
+  const active = ms.list.filter(p=>p.active);
+  if(active.length === 0) return chartEmpty('محتاج تسجيل يوم واحد على الأقل عشان الخط يبان.');
+
+  const n = ms.days;
+  const W = 720, H = 200, padX = 10, padT = 18, padB = 30;
+  const plotH = H - padT - padB;
+
+  let cr = 0, cc = 0;
+  const rev = [], cost = [];
+  ms.list.forEach(p=>{ cr += p.revenue; cc += p.cost; rev.push(cr); cost.push(cc); });
+
+  const maxV = Math.max(cr, cc, 1);
+  const yOf = v => padT + plotH * (1 - v / maxV);
+  const slot = (W - 2*padX) / n;
+  const xOf = i => W - padX - (i + 0.5) * slot;
+
+  const line = arr => arr.map((v,i)=>`${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(' ');
+
+  const areaPts = rev.map((v,i)=>`${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(' ')
+    + ' ' + cost.map((v,i)=>`${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).reverse().join(' ');
+  const winning = cr >= cc;
+
+  let ticks = '';
+  ms.list.forEach((p,i)=>{
+    if((i+1) % 5 === 0 || i === 0)
+      ticks += `<text x="${xOf(i).toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="10.5" fill="#8B95A1">${i+1}</text>`;
+  });
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="الدخل والتكلفة تراكمياً على مدار الشهر">
+      <polygon points="${areaPts}" fill="${winning ? 'rgba(14,122,87,.13)' : 'rgba(192,57,43,.12)'}"/>
+      <polyline points="${line(cost)}" fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="${line(rev)}" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <line x1="${padX}" y1="${(padT+plotH).toFixed(1)}" x2="${W-padX}" y2="${(padT+plotH).toFixed(1)}" stroke="#b6c4d1" stroke-width="1.5"/>
+      ${ticks}
+      <text x="${W-padX}" y="${padT-5}" text-anchor="end" font-size="10.5" fill="#8B95A1">${fmt(maxV)} ج</text>
+    </svg>
+    <div class="chart-legend">
+      <span><i class="line" style="background:var(--ok)"></i> الدخل التراكمي (${fmt(cr)} ج)</span>
+      <span><i class="line" style="background:var(--warn)"></i> التكلفة التراكمية (${fmt(cc)} ج)</span>
+      <span>${winning ? 'الدخل فوق التكلفة — الشهر رابح لحد دلوقتي' : 'التكلفة لسه فوق الدخل — محتاج شغل أكتر أو أسعار أعلى'}</span>
+    </div>`;
+}
+
+function chartDeptHours(y, mIdx){
+  const rows = INTERNAL_DEPTS.map(d=>{
+    const dm = getMonthStats(y, mIdx, d.key);
+    const total = dm.workedHours + dm.idleHours;
+    if(total <= 0){
+      return `<div class="hbar-row">
+        <div class="hbar-head"><b>${d.label}</b><span>مفيش أيام مسجلة</span></div>
+        <div class="hbar"></div>
+      </div>`;
+    }
+    const wp = dm.workedHours / total * 100;
+    const ip = 100 - wp;
+    return `<div class="hbar-row">
+      <div class="hbar-head">
+        <b>${d.label}</b>
+        <span>استغلال ${dm.utilization.toFixed(0)}% · الضايع ${fmt(dm.idleHours)} س = <strong style="color:var(--amber)">${fmt(dm.idleCost)} ج</strong></span>
+      </div>
+      <div class="hbar">
+        <i class="worked" style="width:${wp.toFixed(1)}%" title="اشتغل ${fmt(dm.workedHours)} ساعة">${wp>16 ? fmt(dm.workedHours)+' س' : ''}</i>
+        <i class="idle" style="width:${ip.toFixed(1)}%" title="ضاع ${fmt(dm.idleHours)} ساعة">${ip>16 ? fmt(dm.idleHours)+' س' : ''}</i>
+      </div>
+    </div>`;
+  }).join('');
+
+  return rows + `
+    <div class="chart-legend">
+      <span><i style="background:var(--ok)"></i> ساعات اشتغلت</span>
+      <span><i style="background:var(--amber)"></i> ساعات ضاعت من غير شغل</span>
+    </div>`;
+}
+
+function chartRevenueShare(y, mIdx){
+  const parts = INTERNAL_DEPTS.map(d=>({
+    label: d.label, value: getMonthStats(y, mIdx, d.key).revenue
+  }));
+  const total = parts.reduce((a,b)=>a+b.value, 0);
+  if(total <= 0) return chartEmpty('مفيش دخل مسجل في الشهر ده.');
+
+  const colors = ['var(--indigo)', 'var(--ok)', 'var(--amber)'];
+  const R = 62, C = 78, SW = 26;
+  const circ = 2 * Math.PI * R;
+  let offset = 0, arcs = '', legend = '';
+
+  parts.forEach((p,i)=>{
+    const frac = p.value / total;
+    const len = circ * frac;
+    arcs += `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${colors[i]}" stroke-width="${SW}"
+              stroke-dasharray="${len.toFixed(2)} ${(circ-len).toFixed(2)}"
+              stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${C} ${C})">
+              <title>${p.label}: ${fmt(p.value)} ج (${(frac*100).toFixed(0)}%)</title></circle>`;
+    offset += len;
+    legend += `<span><i style="background:${colors[i]}"></i> ${p.label} — ${fmt(p.value)} ج (${(frac*100).toFixed(0)}%)</span>`;
+  });
+
+  return `
+    <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;">
+      <svg viewBox="0 0 ${C*2} ${C*2}" style="width:156px; max-width:45%; flex-shrink:0;" role="img" aria-label="نصيب كل قسم من دخل الشهر">
+        ${arcs}
+        <text x="${C}" y="${C-3}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">${fmt(total)}</text>
+        <text x="${C}" y="${C+14}" text-anchor="middle" font-size="11" fill="#8B95A1">جنيه</text>
+      </svg>
+      <div class="chart-legend" style="flex-direction:column; gap:8px; margin:0; align-items:flex-start;">${legend}</div>
+    </div>`;
+}
+
+function renderMonthCharts(ms){
+  const scope = calDept === 'all' ? 'كل الأقسام' : deptLabel(calDept);
+  return `
+    <div class="panel">
+      <h2><span class="title-txt">📊 نتائج ${AR_MONTHS[calM]} بالرسم</span><span class="badge internal">${escapeHtml(scope)}</span></h2>
+      <div class="chart-box">
+        <h3>صافي كل يوم</h3>
+        <div class="csub">كل عمود = يوم. العمود الأخضر فوق الخط يعني اليوم ده كسب، والأحمر تحته يعني خسر. الأيام الفاضية مالهاش عمود.</div>
+        ${chartDailyNet(ms)}
+      </div>
+      <div class="chart-box">
+        <h3>الدخل والتكلفة تراكمياً</h3>
+        <div class="csub">الخطين بيتجمعوا يوم ورا يوم. المهم مش الأرقام، المهم إن الخط الأخضر يفضل فوق الأحمر ويبعد عنه.</div>
+        ${chartCumulative(ms)}
+      </div>
+      <div class="chart-box">
+        <h3>ساعات كل قسم: اشتغلت مقابل ضاعت</h3>
+        <div class="csub">الجزء البرتقالي هو الفلوس اللي دفعتها ومخدتش مقابلها شغل. ده أول مكان تدوّر فيه على تحسين.</div>
+        ${chartDeptHours(calY, calM)}
+      </div>
+      <div class="chart-box">
+        <h3>نصيب كل قسم من دخل الشهر</h3>
+        <div class="csub">مين بيجيب الفلوس فعلاً. قارنه بالرسم اللي فوقه: ممكن قسم ياخد ساعات كتير ويجيب دخل قليل.</div>
+        ${chartRevenueShare(calY, calM)}
+      </div>
+    </div>`;
+}
+
+/* ============================================================
+   شاشة الشهر والأرباح
+============================================================ */
+let calY = new Date().getFullYear();
+let calM = new Date().getMonth();
+let calDept = 'all';
+let calSelDay = null;
+
+function calShift(delta){
+  calM += delta;
+  if(calM < 0){ calM = 11; calY--; }
+  if(calM > 11){ calM = 0; calY++; }
+  calSelDay = null;
+  renderMonthView();
+}
+function calSetDept(k){ calDept = k; renderMonthView(); }
+function calPick(dateStr){
+  calSelDay = (calSelDay === dateStr) ? null : dateStr;
+  renderMonthView();
+}
+function calToday(){
+  const n = new Date();
+  calY = n.getFullYear(); calM = n.getMonth();
+  calSelDay = ymd(calY, calM, n.getDate());
+  renderMonthView();
+}
+
+function renderMonthView(){
+  if(!hasPerm('finance','view')){
+    document.getElementById('view-month').innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض الحسابات المالية</div>`;
+    return;
+  }
+  const y = window.scrollY;
+  const ms = getMonthStats(calY, calM, calDept);
+  const todayS = todayStr();
+
+  const firstDow = new Date(calY, calM, 1).getDay();
+  const offset = (firstDow + 1) % 7;
+
+  let cells = '';
+  for(let i=0; i<offset; i++) cells += `<div class="cal-day blank"></div>`;
+
+  for(let d=1; d<=ms.days; d++){
+    const ds = ymd(calY, calM, d);
+    const st = ms.list[d-1];
+    const plans = getSchedFor(ds, calDept);
+    const tone = !st.active ? '' : (st.profit >= 0 ? 'pos' : 'neg');
+    const u = Math.min(100, st.utilization);
+    const uColor = st.utilization >= 85 ? 'var(--ok)' : st.utilization >= 55 ? 'var(--amber)' : 'var(--warn)';
+    cells += `<div class="cal-day ${tone} ${ds===todayS?'today':''} ${ds===calSelDay?'sel':''}" onclick="calPick('${ds}')">
+      <div class="dnum">${d}</div>
+      ${st.active
+        ? `<div class="dnet ${st.profit>=0?'pos':'neg'}">${st.profit>=0?'+':'−'}${fmt(Math.abs(st.profit))}</div>
+           <div class="dsub">${fmt(st.workedHours)}/${fmt(st.capacity)} س</div>`
+        : (plans.length ? '' : `<div class="dsub" style="opacity:.5">—</div>`)}
+      ${plans.length ? `<div class="plan">📌 ${plans.length}</div>` : ''}
+      ${st.active ? `<div class="ubar"><i style="width:${u}%; background:${uColor}"></i></div>` : ''}
+    </div>`;
+  }
+
+  const netCls = ms.profit >= 0 ? '' : 'negative';
+  const deptSeg = ['all', ...INTERNAL_DEPTS.map(d=>d.key)].map(k=>
+    `<button class="${calDept===k?'on':''}" onclick="calSetDept('${k}')">${k==='all'?'كل الأقسام':deptLabel(k)}</button>`
+  ).join('');
+
+  let tiles = '';
+  if(calDept === 'all'){
+    tiles = `<div class="dept-tiles">` + INTERNAL_DEPTS.map(d=>{
+      const dm = getMonthStats(calY, calM, d.key);
+      const u = Math.min(100, dm.utilization);
+      const uColor = dm.utilization >= 85 ? 'var(--ok)' : dm.utilization >= 55 ? 'var(--amber)' : 'var(--warn)';
+      return `<div class="dept-tile">
+        <div class="dt-name">${d.label}<span class="badge ${dm.profit>=0?'ok':'warn'}">${dm.profit>=0?'ربح':'خسارة'}</span></div>
+        <div class="dt-row"><span>دخل الشهر</span><b>${fmt(dm.revenue)} ج</b></div>
+        <div class="dt-row"><span>تكلفة الشهر</span><b>${fmt(dm.cost)} ج</b></div>
+        <div class="dt-row"><span>الصافي</span><b class="${dm.profit>=0?'pos':'neg'}">${fmt(dm.profit)} ج</b></div>
+        <div class="dt-row"><span>ساعات شغل</span><b>${fmt(dm.workedHours)} س</b></div>
+        <div class="dt-row"><span>ساعات ضايعة</span><b class="idle">${fmt(dm.idleHours)} س = ${fmt(dm.idleCost)} ج</b></div>
+        <div class="util-bar"><i style="width:${u}%; background:${uColor}"></i></div>
+        <div class="hint" style="margin-top:5px;">الاستغلال ${dm.utilization.toFixed(0)}%</div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  document.getElementById('view-month').innerHTML = `
+    <div class="panel">
+      <div class="cal-toolbar">
+        <div class="month-nav">
+          <button onclick="calShift(-1)" title="الشهر اللي فات">›</button>
+          <div class="mlabel">${AR_MONTHS[calM]} ${calY}</div>
+          <button onclick="calShift(1)" title="الشهر الجاي">‹</button>
+          <button class="btn ghost small" style="margin-inline-start:6px;" onclick="calToday()">النهارده</button>
+        </div>
+        <div class="seg">${deptSeg}</div>
+      </div>
+      <div class="cost-summary">
+        <div class="cost-item"><div class="lbl">دخل الشهر</div><div class="val">${fmt(ms.revenue)} ج</div></div>
+        <div class="cost-item"><div class="lbl">تكلفة الشهر</div><div class="val">${fmt(ms.cost)} ج</div></div>
+        <div class="cost-item profit ${netCls}"><div class="lbl">الصافي</div><div class="val">${fmt(ms.profit)} ج</div></div>
+        <div class="cost-item"><div class="lbl">ساعات ضايعة</div><div class="val" style="color:var(--amber)">${fmt(ms.idleHours)} س</div></div>
+        <div class="cost-item"><div class="lbl">قيمة الهدر</div><div class="val" style="color:var(--amber)">${fmt(ms.idleCost)} ج</div></div>
+        <div class="cost-item"><div class="lbl">الاستغلال</div><div class="val">${ms.utilization.toFixed(0)}%</div></div>
+      </div>
+      ${ms.workedDays < (Number(state.factory.workDaysPerMonth)||26) ? `
+      <div class="mini-note warn">
+        سجّلت إنتاج في ${fmt(ms.workedDays)} يوم بس من أصل ${fmt(state.factory.workDaysPerMonth)} يوم عمل في الشهر.
+        الأيام اللي مسجّلتش فيها حاجة مش محسوبة عليك أصلاً — يعني لو كنت شغّال فيها ومسجّلتش، الخسارة الحقيقية أكبر من الرقم اللي فوق.
+      </div>` : ''}
+      ${tiles}
+    </div>
+    <div class="panel">
+      <h2><span class="title-txt">أيام ${AR_MONTHS[calM]}</span><span class="badge pending">دوس على أي يوم للتفاصيل</span></h2>
+      <div class="cal-grid">
+        ${AR_WEEK.map(w=>`<div class="cal-hd">${w}</div>`).join('')}
+        ${cells}
+      </div>
+      <div class="cal-legend">
+        <span><i style="background:#eaf7f2; border-color:#bfe3d6"></i> يوم ربح</span>
+        <span><i style="background:#fdf0ee; border-color:#f0cdc7"></i> يوم خسارة</span>
+        <span><i style="background:var(--surface-2)"></i> مفيش تسجيل</span>
+        <span>📌 فيه موديل محجوز في الميعاد ده</span>
+      </div>
+    </div>
+    ${renderMonthCharts(ms)}
+    ${calSelDay ? renderDayPanel(calSelDay) : ''}
+  `;
+  requestAnimationFrame(()=>window.scrollTo(0, y));
+}
+
+function renderDayPanel(ds){
+  const d = new Date(ds + 'T00:00:00');
+  const title = `${AR_WEEK[(d.getDay()+1)%7]} ${d.getDate()} ${AR_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const plans = getSchedFor(ds, calDept);
+  const canEdit = hasPerm('finance','edit');
+
+  const depts = (calDept==='all' ? INTERNAL_DEPTS.map(x=>x.key) : [calDept]);
+  const boxes = depts.map(k=>{
+    const st = getDayDeptStats(ds, k);
+    const rows = st.logs.map(l=>`
+      <tr>
+        <td>${escapeHtml(modelName(l.modelId))}</td>
+        <td>${fmt(l.qty)}</td>
+        <td>${fmt(l.hours)} س</td>
+        <td>${fmt(l.revenue)} ج</td>
+        <td>${escapeHtml(l.note||'—')}</td>
+        <td class="row-actions">
+          ${canEdit ? `
+          <button class="icon-btn" onclick="openEditDayLog('${l.id}')">✏️</button>
+          <button class="icon-btn" onclick="deleteDayLog('${l.id}')">🗑</button>
+          ` : ''}
+        </td>
+      </tr>`).join('');
+
+    return `<div class="day-entry-box">
+      <div class="deb-head">
+        <span>${deptLabel(k)}</span>
+        ${st.active
+          ? `<span class="badge ${st.profit>=0?'ok':'warn'}">${st.profit>=0?'ربح':'خسارة'} ${fmt(st.profit)} ج</span>`
+          : `<span class="badge pending">مفيش تسجيل</span>`}
+      </div>
+      ${st.active ? `
+        <div class="dt-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span>طاقة اليوم</span><b>${fmt(st.capacity)} س × ${fmt(st.rate)} ج = ${fmt(st.cost)} ج</b></div>
+        <div class="dt-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span>اشتغل فعلاً</span><b>${fmt(st.workedHours)} س</b></div>
+        <div class="dt-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span>ضاع من غير شغل</span><b style="color:var(--amber)">${fmt(st.idleHours)} س = ${fmt(st.idleCost)} ج</b></div>
+        ${st.overHours>0 ? `<div class="dt-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span>ساعات إضافية فوق الطاقة</span><b>${fmt(st.overHours)} س</b></div>` : ''}
+        <div class="dt-row" style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0;"><span>دخل اليوم</span><b>${fmt(st.revenue)} ج</b></div>
+        ${rows ? `<table class="data-table" style="margin-top:10px;">
+          <thead><tr><th>الموديل</th><th>عدد</th><th>ساعات</th><th>الدخل</th><th>ملاحظة</th><th></th></tr></thead>
+          <tbody>${rows}</tbody></table>`
+        : `<div class="empty-state" style="padding:16px;"><p>القسم ده قعد فاضي اليوم ده — ${fmt(st.idleCost)} ج راحت من غير مقابل.</p></div>`}
+      ` : `<div class="empty-state" style="padding:16px;"><p>مفيش أي تسجيل في اليوم ده.</p></div>`}
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="panel">
+      <h2>
+        <span class="title-txt">📆 ${title}</span>
+        ${canEdit ? `<button class="btn brass small" onclick="openDailyForDate('${ds}')">سجّل إنتاج اليوم ده</button>` : ''}
+      </h2>
+      ${plans.length ? `
+        <div class="mini-note">
+          <strong>محجوز في اليوم ده:</strong><br>
+          ${plans.map(sc=>`📌 ${escapeHtml(modelName(sc.modelId))} — ${deptLabel(sc.dept)}${sc.hours?` (${fmt(sc.hours)} ساعة متوقعة)`:''}${sc.note?` — ${escapeHtml(sc.note)}`:''}`).join('<br>')}
+        </div>` : ''}
+      ${boxes}
+    </div>`;
+}
+
+/* ============================================================
+   شاشة تسجيل الإنتاج اليومي
+============================================================ */
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+let dailyDate = todayStr();
+let dailyModelId = null;
+
+function openDailyForDate(ds){
+  dailyDate = ds;
+  switchMainTab('daily');
+}
+
+function renderDailyView(){
+  if(!hasPerm('finance','view')){
+    document.getElementById('view-daily').innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض الحسابات المالية</div>`;
+    return;
+  }
+  const canEdit = hasPerm('finance','edit');
+  const y = window.scrollY;
+  const models = state.models.filter(m => m.status !== 'closed');
+  if(!dailyModelId || !models.some(m=>m.id===dailyModelId)) dailyModelId = models[0] ? models[0].id : null;
+
+  const dayAll = getDayStats(dailyDate, 'all');
+  const logsToday = (state.dayLogs||[]).filter(l=>l.date===dailyDate);
+
+  const deptBoxes = INTERNAL_DEPTS.map(d=>{
+    const cap = getDeptDailyCapacity(d.key);
+    const rate = getDeptHourlyRate(d.key);
+    return `<div class="day-entry-box">
+      <div class="deb-head">
+        <span>${d.label}</span>
+        <span class="hint">طاقة ${fmt(cap)} س · ${fmt(rate)} ج/ساعة</span>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>عدد القطع المنتجة</label>
+          <input type="number" inputmode="numeric" id="dl_${d.key}_qty" placeholder="0" ${!canEdit?'disabled':''} oninput="autoRevenue('${d.key}')"></div>
+        <div class="field"><label>الساعات اللي اتاخدت</label>
+          <input type="number" inputmode="decimal" id="dl_${d.key}_hours" placeholder="0" ${!canEdit?'disabled':''}></div>
+        <div class="field"><label>قيمة الشغل (ج)</label>
+          <input type="number" inputmode="decimal" id="dl_${d.key}_rev" placeholder="0" ${!canEdit?'disabled':''}></div>
+      </div>
+      <div class="hint" id="dl_${d.key}_hint" style="margin-top:7px;"></div>
+    </div>`;
+  }).join('');
+
+  const rows = logsToday.map(l=>`
+    <tr>
+      <td>${deptLabel(l.dept)}</td>
+      <td>${escapeHtml(modelName(l.modelId))}</td>
+      <td>${fmt(l.qty)}</td>
+      <td>${fmt(l.hours)} س</td>
+      <td>${fmt(l.revenue)} ج</td>
+      <td class="row-actions">
+        ${canEdit ? `
+        <button class="icon-btn" onclick="openEditDayLog('${l.id}')">✏️</button>
+        <button class="icon-btn" onclick="deleteDayLog('${l.id}')">🗑</button>
+        ` : ''}
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('view-daily').innerHTML = `
+    <div class="panel">
+      <h2><span class="title-txt">📥 تسجيل إنتاج اليوم</span></h2>
+      <p class="hint">اختار اليوم والموديل، وسجّل كل قسم أنتج منه كام قطعة وأخد كام ساعة. سيب القسم فاضي لو مشتغلش على الموديل ده النهارده.</p>
+      <div class="form-grid" style="margin-top:12px;">
+        <div class="field"><label>التاريخ</label>
+          <input type="date" id="dl_date" value="${dailyDate}" ${!canEdit?'disabled':''} onchange="dailyDate=this.value; renderDailyView();"></div>
+        <div class="field"><label>الموديل</label>
+          <select id="dl_model" ${!canEdit?'disabled':''} onchange="dailyModelId=this.value; renderDailyView();">
+            ${models.map(m=>`<option value="${m.id}" ${m.id===dailyModelId?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${models.length===0 ? `<div class="empty-state" style="margin-top:12px;"><div class="icon">🧵</div><p>مفيش موديلات مفتوحة. ضيف موديل من تاب "الموديلات" الأول.</p></div>` : (!canEdit ? `<p class="hint" style="margin-top:12px;">عرض فقط — مفيش صلاحية تعديل الحسابات المالية</p>` : `
+        <div style="margin-top:14px;">${deptBoxes}</div>
+        <button class="btn brass full" onclick="saveDailyProduction()">احفظ إنتاج اليوم</button>
+        <div class="hint" style="margin-top:10px;">
+          قيمة الشغل بتتقترح تلقائي من سعر بيع القطعة ونصيب القسم من تكلفة الموديل، وتقدر تعدّلها بإيدك.
+          لو سجّلت نفس اليوم ونفس الموديل ونفس القسم تاني، الرقم الجديد بيحلّ محل القديم.
+        </div>`)}
+    </div>
+    <div class="panel">
+      <h2>
+        <span class="title-txt">سجل يوم ${formatDateArabic(dailyDate)}</span>
+        <span class="badge ${dayAll.active ? (dayAll.profit>=0?'ok':'warn') : 'pending'}">
+          ${dayAll.active ? `صافي اليوم ${fmt(dayAll.profit)} ج` : 'مفيش تسجيل'}
+        </span>
+      </h2>
+      ${logsToday.length===0
+        ? `<div class="empty-state"><div class="icon">📭</div><p>مفيش إنتاج مسجل في اليوم ده لسه.</p></div>`
+        : `<table class="data-table">
+            <thead><tr><th>القسم</th><th>الموديل</th><th>عدد</th><th>ساعات</th><th>الدخل</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+           </table>
+           <div class="cost-summary" style="margin-top:14px;">
+             <div class="cost-item"><div class="lbl">دخل اليوم</div><div class="val">${fmt(dayAll.revenue)} ج</div></div>
+             <div class="cost-item"><div class="lbl">تكلفة اليوم</div><div class="val">${fmt(dayAll.cost)} ج</div></div>
+             <div class="cost-item profit ${dayAll.profit<0?'negative':''}"><div class="lbl">الصافي</div><div class="val">${fmt(dayAll.profit)} ج</div></div>
+             <div class="cost-item"><div class="lbl">ساعات ضايعة</div><div class="val" style="color:var(--amber)">${fmt(dayAll.idleHours)} س = ${fmt(dayAll.idleCost)} ج</div></div>
+           </div>`}
+    </div>
+  `;
+  INTERNAL_DEPTS.forEach(d=>autoRevenue(d.key, true));
+  requestAnimationFrame(()=>window.scrollTo(0, y));
+}
+
+function autoRevenue(deptKey, silent){
+  const qtyEl = document.getElementById('dl_'+deptKey+'_qty');
+  const revEl = document.getElementById('dl_'+deptKey+'_rev');
+  const hintEl = document.getElementById('dl_'+deptKey+'_hint');
+  if(!qtyEl || !revEl) return;
+  const qty = Number(qtyEl.value) || 0;
+  const sug = suggestRevenue(dailyModelId, deptKey, qty);
+  if(hintEl){
+    hintEl.textContent = qty>0 && sug>0
+      ? `قيمة مقترحة: ${fmt(sug)} ج (${fmt(qty)} قطعة × نصيب ${deptLabel(deptKey)} من سعر القطعة)`
+      : '';
+  }
+  if(silent) return;
+  if(!revEl.dataset.touched) revEl.value = sug ? Math.round(sug*100)/100 : '';
+}
+
+function saveDailyProduction(){
+  if(!requireEdit('finance','تسجيل إنتاج اليوم')) return;
+  if(!dailyModelId){ toast('اختار موديل الأول'); return; }
+  if(!dailyDate){ toast('اختار التاريخ'); return; }
+  let saved = 0;
+  INTERNAL_DEPTS.forEach(d=>{
+    const qty = Number(document.getElementById('dl_'+d.key+'_qty').value) || 0;
+    const hours = Number(document.getElementById('dl_'+d.key+'_hours').value) || 0;
+    const revenue = Number(document.getElementById('dl_'+d.key+'_rev').value) || 0;
+    if(qty <= 0 && hours <= 0) return;
+    const existing = (state.dayLogs||[]).find(l =>
+      l.date===dailyDate && l.dept===d.key && l.modelId===dailyModelId);
+    if(existing){
+      existing.qty = qty; existing.hours = hours; existing.revenue = revenue;
+    } else {
+      state.dayLogs.push({id:uid(), date:dailyDate, dept:d.key, modelId:dailyModelId, qty, hours, revenue, note:''});
+    }
+    saved++;
+  });
+  if(saved === 0){ toast('اكتب عدد قطع أو ساعات لقسم واحد على الأقل'); return; }
+  saveState();
+  renderDailyView();
+  toast(`تم حفظ ${saved} قسم ✓`);
+}
+
+async function deleteDayLog(id){
+  if(!requireEdit('finance','حذف تسجيل إنتاج')) return;
+  if(!await confirmDialog('هيتشال التسجيل ده، وحسابات اليوم هتتظبط من غيره.', {title:'حذف تسجيل الإنتاج', yes:'احذف', danger:true})) return;
+  state.dayLogs = (state.dayLogs||[]).filter(l=>l.id!==id);
+  saveState();
+  if(document.getElementById('view-daily').classList.contains('active')) renderDailyView();
+  else renderMonthView();
+  toast('تم الحذف');
+}
+
+function openEditDayLog(id){
+  if(!requireEdit('finance','تعديل تسجيل إنتاج')) return;
+  const l = (state.dayLogs||[]).find(x=>x.id===id);
+  if(!l) return;
+  document.getElementById('modalContent').innerHTML = `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3>تعديل تسجيل الإنتاج</h3>
+    <div class="hint" style="margin-bottom:12px;">${deptLabel(l.dept)} — ${escapeHtml(modelName(l.modelId))} — ${formatDateArabic(l.date)}</div>
+    <div class="form-grid">
+      <div class="field"><label>عدد القطع</label><input type="number" inputmode="numeric" id="edl_qty" value="${l.qty||0}"></div>
+      <div class="field"><label>الساعات</label><input type="number" inputmode="decimal" id="edl_hours" value="${l.hours||0}"></div>
+      <div class="field"><label>قيمة الشغل (ج)</label><input type="number" inputmode="decimal" id="edl_rev" value="${l.revenue||0}"></div>
+      <div class="field"><label>ملاحظة</label><input type="text" id="edl_note" value="${escapeHtml(l.note||'')}"></div>
+    </div>
+    <button class="btn brass full" style="margin-top:16px;" onclick="saveEditDayLog('${id}')">💾 حفظ التعديل</button>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function saveEditDayLog(id){
+  if(!requireEdit('finance','تعديل تسجيل إنتاج')) return;
+  const l = (state.dayLogs||[]).find(x=>x.id===id);
+  if(!l) return;
+  l.qty = Number(document.getElementById('edl_qty').value) || 0;
+  l.hours = Number(document.getElementById('edl_hours').value) || 0;
+  l.revenue = Number(document.getElementById('edl_rev').value) || 0;
+  l.note = document.getElementById('edl_note').value.trim();
+  saveState(); closeModal();
+  if(document.getElementById('view-daily').classList.contains('active')) renderDailyView();
+  else renderMonthView();
+  toast('تم حفظ التعديل ✓');
+}
+
 
 window.onAuthReady = async function(){
   await loadStateFromCloud();
-  switchMainTab('models');
+  const perms = window.currentPermissions || {};
+  if(perms.models==='view' || perms.models==='edit') switchMainTab('models');
+  else if(perms.finance==='view' || perms.finance==='edit') switchMainTab('month');
+  else if(perms.attendance==='view' || perms.attendance==='edit') switchMainTab('attendance');
+  else if(perms.employees==='view' || perms.employees==='edit' || perms.factory_settings==='view' || perms.factory_settings==='edit') switchMainTab('settings');
+  else if(perms.users==='edit') switchMainTab('users');
+  else switchMainTab('models');
 };
 </script>
 </body>
