@@ -876,7 +876,16 @@ function migrateState(){
   if(!Array.isArray(state.schedule)) state.schedule = [];
   if(!Array.isArray(state.models)) state.models = [];
   if(!state.attendance) state.attendance = {};
+  if(!Array.isArray(state.hrAdvances)) state.hrAdvances = [];
+  if(!Array.isArray(state.deductions)) state.deductions = [];
+  if(!Array.isArray(state.deptSettings)) state.deptSettings = [];
   state.models.forEach(m=>{ if(!m.sewingOps) m.sewingOps = []; });
+  state.factory.employees.forEach(e=>{
+    if(!e.payType) e.payType = 'monthly';
+    if(e.weeklyRate===undefined) e.weeklyRate = 0;
+    if(e.prevBalance===undefined) e.prevBalance = 0;
+    if(e.bonus===undefined) e.bonus = 0;
+  });
 }
 
 function loadState(){
@@ -1014,6 +1023,292 @@ function getDeptMonthlyCost(deptKey){ return getDeptMonthlyCostFor(deptKey, stat
 function getFactoryContextFor(m){
   if(m && m.status==='closed' && m.closedSnapshot) return m.closedSnapshot;
   return state.factory;
+}
+
+/* ============================================================
+   محرك الرواتب — قاعدة ثابتة مستقلة عن ساعات/أيام إعدادات المصنع
+   الشهر المالي = 30 يوم دائماً، ساعات الشهر = 270 ساعة ثابتة
+============================================================ */
+const PAYROLL_RULES = {
+  FINANCIAL_MONTH_DAYS: 30,
+  WORK_HOURS_PER_DAY: 9,
+  MONTHLY_HOURS: 270,
+  WEEKS_PER_MONTH: 4,
+  OVERTIME_MULTIPLIER: 1.5,
+};
+
+/* كل سجلات حضور موظف معيّن، مسطّحة من بنية attendance[month][day][empId] */
+function getEmployeeAttendanceRecords(empId){
+  const out = [];
+  Object.keys(state.attendance||{}).forEach(mk=>{
+    const monthObj = state.attendance[mk] || {};
+    Object.keys(monthObj).forEach(dk=>{
+      const rec = monthObj[dk][empId];
+      if(rec) out.push({...rec, date:dk});
+    });
+  });
+  return out;
+}
+
+function calcPayroll(emp){
+  const payType = emp.payType || 'monthly';
+  let weeklyRate, fullMonthSalary;
+  if(payType === 'monthly'){
+    fullMonthSalary = Number(emp.salary)||0;
+    weeklyRate = fullMonthSalary / PAYROLL_RULES.WEEKS_PER_MONTH;
+  } else {
+    weeklyRate = Number(emp.weeklyRate)||0;
+    fullMonthSalary = weeklyRate * PAYROLL_RULES.WEEKS_PER_MONTH;
+  }
+
+  const dailyRate = fullMonthSalary / PAYROLL_RULES.FINANCIAL_MONTH_DAYS;
+  const hourlyRate = dailyRate / PAYROLL_RULES.WORK_HOURS_PER_DAY;
+
+  const atts = getEmployeeAttendanceRecords(emp.id);
+  const presentAtts = atts.filter(a=>a.status==='present' && a.type!=='friday');
+  const presentDays = presentAtts.length;
+  const absentAtts = atts.filter(a=>a.status==='absent');
+  const absenceDays = absentAtts.length;
+  const totalOT = atts.reduce((s,a)=>s+(Number(a.otHours)||0), 0);
+  const totalLatePen = atts.reduce((s,a)=>s+(Number(a.latePen)||0), 0);
+  const totalEarlyPen = atts.reduce((s,a)=>s+(Number(a.earlyPen)||0), 0);
+
+  const fridaysCount = atts.filter(a=>a.type==='friday').length;
+  const otPay = totalOT * hourlyRate * PAYROLL_RULES.OVERTIME_MULTIPLIER;
+
+  const advances = (state.hrAdvances||[]).filter(a=>a.empId===emp.id && !a.settled);
+  const regularAdvances = advances.filter(a=>a.type!=='bonus');
+  const bonusAdvances = advances.filter(a=>a.type==='bonus');
+  const totalAdv = regularAdvances.reduce((s,a)=>s+(Number(a.amount)||0), 0);
+  const totalBonusFromAdvances = bonusAdvances.reduce((s,a)=>s+(Number(a.amount)||0), 0);
+
+  const cashDeds = (state.deductions||[]).filter(d=>d.empId===emp.id && !d.settled);
+  const totalCashDed = cashDeds.reduce((s,d)=>s+(Number(d.amount)||0), 0);
+
+  const absPenalty = absentAtts.reduce((s,a)=>s+(a.absPenalty!=null ? Number(a.absPenalty) : dailyRate), 0);
+
+  const bonus = Number(emp.bonus)||0;
+  const prevBal = Number(emp.prevBalance)||0;
+
+  const paidDays = presentDays + fridaysCount;
+  const earnedByDays = Math.min(Math.max(paidDays * dailyRate, 0), fullMonthSalary);
+
+  const totalDed = totalAdv + totalCashDed + totalLatePen + totalEarlyPen + absPenalty;
+  const netEOM = (earnedByDays + otPay + bonus + totalBonusFromAdvances + prevBal) - totalDed;
+
+  return {
+    payType, weeklyRate, dailyRate, hourlyRate, fullMonthSalary,
+    presentDays, absenceDays, fridaysCount, paidDays,
+    totalOT, otPay, totalLatePen, totalEarlyPen, absPenalty,
+    advances, totalAdv, totalBonusFromAdvances, cashDeds, totalCashDed,
+    bonus, prevBal, earnedByDays, totalDed, netEOM
+  };
+}
+
+/* ============================================================
+   واجهة تفاصيل راتب الموظف
+============================================================ */
+window._payrollEmpId = null;
+window._payrollTab = 'summary';
+
+function openPayrollDetail(empId){
+  if(!hasPerm('employees','view')) return;
+  window._payrollEmpId = empId;
+  window._payrollTab = 'summary';
+  renderPayrollModal();
+}
+
+function closePayrollModal(){
+  window._payrollEmpId = null;
+  document.getElementById('modalOverlay').classList.remove('active');
+  document.getElementById('modalContent').innerHTML = '';
+}
+
+function switchPayrollTab(tab){
+  window._payrollTab = tab;
+  renderPayrollModal();
+}
+
+function renderPayrollModal(){
+  const emp = state.factory.employees.find(e=>e.id===window._payrollEmpId);
+  if(!emp) return;
+  const p = calcPayroll(emp);
+  const canEdit = hasPerm('employees','edit');
+  const tabs = [
+    {k:'summary', l:'ملخص'},
+    {k:'advances', l:'السلف والمكافآت'},
+    {k:'deductions', l:'الخصومات'},
+  ];
+
+  let body = '';
+  if(window._payrollTab === 'summary') body = renderPayrollSummaryTab(emp, p);
+  else if(window._payrollTab === 'advances') body = renderPayrollAdvancesTab(emp, p, canEdit);
+  else if(window._payrollTab === 'deductions') body = renderPayrollDeductionsTab(emp, p, canEdit);
+
+  document.getElementById('modalContent').innerHTML = `
+    <button class="modal-close" onclick="closePayrollModal()">✕</button>
+    <h3>💰 راتب ${escapeHtml(emp.name)}</h3>
+    <div class="stage-tabs" style="margin-bottom:18px;">
+      ${tabs.map(t=>`<div class="stage-tab ${window._payrollTab===t.k?'active':''}" onclick="switchPayrollTab('${t.k}')">${t.l}</div>`).join('')}
+    </div>
+    <div id="payrollTabBody">${body}</div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function renderPayrollSummaryTab(emp, p){
+  return `
+    <div class="cost-summary" style="margin-bottom:18px;">
+      <div class="cost-item"><div class="lbl">نوع الراتب</div><div class="val" style="font-size:15px;">${p.payType==='monthly'?'شهري':'أسبوعي'}</div></div>
+      <div class="cost-item"><div class="lbl">الراتب الشهري الكامل</div><div class="val">${fmt(p.fullMonthSalary)} ج</div></div>
+      <div class="cost-item"><div class="lbl">اليومية الثابتة</div><div class="val">${fmt(p.dailyRate)} ج</div></div>
+      <div class="cost-item"><div class="lbl">سعر الساعة الثابت</div><div class="val">${fmt(p.hourlyRate)} ج</div></div>
+    </div>
+    <div class="hint" style="margin-bottom:16px;">القاعدة الثابتة: الشهر المالي = 30 يوم، ساعات الشهر = 270 ساعة (30×9)، بغض النظر عن عدد أيام الشهر الفعلي.</div>
+
+    <div class="section-divider">الحضور هذا الشهر (كل الشهور المسجّلة)</div>
+    <div class="cost-summary" style="margin-bottom:18px;">
+      <div class="cost-item"><div class="lbl">أيام حضور</div><div class="val">${fmt(p.presentDays)}</div></div>
+      <div class="cost-item"><div class="lbl">أيام غياب</div><div class="val" style="color:var(--warn);">${fmt(p.absenceDays)}</div></div>
+      <div class="cost-item"><div class="lbl">جُمَع مدفوعة</div><div class="val">${fmt(p.fridaysCount)}</div></div>
+      <div class="cost-item"><div class="lbl">أيام مدفوعة</div><div class="val">${fmt(p.paidDays)}</div></div>
+    </div>
+
+    <div class="section-divider">التفاصيل المالية</div>
+    <div class="cost-breakdown">
+      <div class="line"><span>مستحق الأيام (${fmt(p.paidDays)} يوم × ${fmt(p.dailyRate)} ج)</span><span>${fmt(p.earnedByDays)} ج</span></div>
+      <div class="line"><span>سهر (${fmt(p.totalOT)} س × ${fmt(p.hourlyRate)} ج × 1.5)</span><span>${fmt(p.otPay)} ج</span></div>
+      <div class="line"><span>مكافأة الشهر</span><span>${fmt(p.bonus)} ج</span></div>
+      <div class="line"><span>مكافآت إضافية (من السلف)</span><span>${fmt(p.totalBonusFromAdvances)} ج</span></div>
+      <div class="line"><span>رصيد سابق مرحّل</span><span>${fmt(p.prevBal)} ج</span></div>
+      <div class="line" style="color:var(--warn);"><span>خصم سلف</span><span>−${fmt(p.totalAdv)} ج</span></div>
+      <div class="line" style="color:var(--warn);"><span>خصومات نقدية</span><span>−${fmt(p.totalCashDed)} ج</span></div>
+      <div class="line" style="color:var(--warn);"><span>خصم تأخير</span><span>−${fmt(p.totalLatePen)} ج</span></div>
+      <div class="line" style="color:var(--warn);"><span>خصم خروج مبكر</span><span>−${fmt(p.totalEarlyPen)} ج</span></div>
+      <div class="line" style="color:var(--warn);"><span>خصم غياب</span><span>−${fmt(p.absPenalty)} ج</span></div>
+      <div class="line total"><span>الصافي المستحق</span><span style="color:${p.netEOM>=0?'var(--ok)':'var(--warn)'};">${fmt(p.netEOM)} ج</span></div>
+    </div>
+  `;
+}
+
+function renderPayrollAdvancesTab(emp, p, canEdit){
+  return `
+    ${canEdit ? `
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field"><label>النوع</label>
+        <select id="adv_type">
+          <option value="advance">سلفة (تُخصم من الراتب)</option>
+          <option value="bonus">مكافأة (تُضاف للراتب)</option>
+        </select>
+      </div>
+      <div class="field"><label>المبلغ (ج)</label><input type="number" id="adv_amount" placeholder="500"></div>
+      <div class="field"><label>ملاحظة</label><input type="text" id="adv_note" placeholder="اختياري"></div>
+    </div>
+    <button class="btn brass" onclick="addAdvance('${emp.id}')">إضافة</button>
+    ` : ''}
+
+    <div class="section-divider" style="margin-top:20px;">السجل الحالي (غير مُسوّى)</div>
+    ${p.advances.length===0 ? `<div class="empty-state"><p>مفيش سلف أو مكافآت مسجّلة.</p></div>` : `
+    <table class="data-table">
+      <thead><tr><th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th>التاريخ</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>
+        ${p.advances.map(a=>`
+          <tr>
+            <td>${a.type==='bonus'?'مكافأة':'سلفة'}</td>
+            <td>${fmt(a.amount)} ج</td>
+            <td>${escapeHtml(a.note||'—')}</td>
+            <td>${a.date||''}</td>
+            ${canEdit ? `<td><button class="icon-btn" onclick="settleAdvance('${a.id}')" title="تسوية">✓</button><button class="icon-btn" onclick="deleteAdvance('${a.id}')">🗑</button></td>` : ''}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`}
+  `;
+}
+
+function renderPayrollDeductionsTab(emp, p, canEdit){
+  return `
+    ${canEdit ? `
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field"><label>المبلغ (ج)</label><input type="number" id="ded_amount" placeholder="100"></div>
+      <div class="field"><label>السبب</label><input type="text" id="ded_reason" placeholder="مثال: تلف أدوات"></div>
+    </div>
+    <button class="btn brass" onclick="addDeduction('${emp.id}')">إضافة خصم</button>
+    ` : ''}
+
+    <div class="section-divider" style="margin-top:20px;">الخصومات الحالية (غير مُسوّاة)</div>
+    ${p.cashDeds.length===0 ? `<div class="empty-state"><p>مفيش خصومات نقدية مسجّلة.</p></div>` : `
+    <table class="data-table">
+      <thead><tr><th>المبلغ</th><th>السبب</th><th>التاريخ</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>
+        ${p.cashDeds.map(d=>`
+          <tr>
+            <td>${fmt(d.amount)} ج</td>
+            <td>${escapeHtml(d.reason||'—')}</td>
+            <td>${d.date||''}</td>
+            ${canEdit ? `<td><button class="icon-btn" onclick="settleDeduction('${d.id}')" title="تسوية">✓</button><button class="icon-btn" onclick="deleteDeduction('${d.id}')">🗑</button></td>` : ''}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`}
+  `;
+}
+
+function addAdvance(empId){
+  if(!requireEdit('employees','إضافة سلفة/مكافأة')) return;
+  const type = document.getElementById('adv_type').value;
+  const amount = Number(document.getElementById('adv_amount').value)||0;
+  const note = document.getElementById('adv_note').value.trim();
+  if(amount<=0){ toast('⚠️ اكتب مبلغ أكبر من صفر'); return; }
+  state.hrAdvances.push({id:uid(), empId, type, amount, note, date:todayStr(), settled:false});
+  saveState();
+  toast('✅ تم الإضافة');
+  renderPayrollModal();
+}
+
+function settleAdvance(id){
+  if(!requireEdit('employees','تسوية سلفة')) return;
+  const a = state.hrAdvances.find(x=>x.id===id);
+  if(a) a.settled = true;
+  saveState();
+  toast('✅ تمت التسوية');
+  renderPayrollModal();
+}
+
+function deleteAdvance(id){
+  if(!requireEdit('employees','حذف سلفة')) return;
+  state.hrAdvances = state.hrAdvances.filter(x=>x.id!==id);
+  saveState();
+  toast('تم الحذف');
+  renderPayrollModal();
+}
+
+function addDeduction(empId){
+  if(!requireEdit('employees','إضافة خصم')) return;
+  const amount = Number(document.getElementById('ded_amount').value)||0;
+  const reason = document.getElementById('ded_reason').value.trim();
+  if(amount<=0){ toast('⚠️ اكتب مبلغ أكبر من صفر'); return; }
+  state.deductions.push({id:uid(), empId, amount, reason, date:todayStr(), settled:false});
+  saveState();
+  toast('✅ تم الإضافة');
+  renderPayrollModal();
+}
+
+function settleDeduction(id){
+  if(!requireEdit('employees','تسوية خصم')) return;
+  const d = state.deductions.find(x=>x.id===id);
+  if(d) d.settled = true;
+  saveState();
+  toast('✅ تمت التسوية');
+  renderPayrollModal();
+}
+
+function deleteDeduction(id){
+  if(!requireEdit('employees','حذف خصم')) return;
+  state.deductions = state.deductions.filter(x=>x.id!==id);
+  saveState();
+  toast('تم الحذف');
+  renderPayrollModal();
 }
 
 /* ============================================================
@@ -1437,6 +1732,21 @@ function renderEmployeesPanel(f){
           </div>
           <div class="hint" id="edit_emp_split_sum" style="margin-top:4px;">الإجمالي: 0%</div>
         </div>
+
+        <div class="section-divider" style="margin-top:14px;">إعدادات الراتب</div>
+        <div class="field"><label>نوع الراتب</label>
+          <select id="edit_emp_paytype" onchange="toggleEditPayTypeMode()">
+            <option value="monthly">شهري</option>
+            <option value="weekly">أسبوعي</option>
+          </select>
+        </div>
+        <div class="field" id="edit_emp_weekly_wrap" style="display:none;">
+          <label>الراتب الأسبوعي (ج)</label>
+          <input type="number" id="edit_emp_weekly">
+        </div>
+        <div class="field"><label>رصيد سابق مرحّل (ج)</label><input type="number" id="edit_emp_prevbal" placeholder="0"></div>
+        <div class="field"><label>مكافأة هذا الشهر (ج)</label><input type="number" id="edit_emp_bonus" placeholder="0"></div>
+
         <div style="display:flex; gap:8px; margin-top:14px;">
           <button class="btn brass" onclick="saveEditedEmployee()">حفظ التعديل</button>
           <button class="btn ghost" onclick="closeEditEmployee()">إلغاء</button>
@@ -1450,9 +1760,12 @@ function renderEmployeeRow(e){
   const deptLabel = e.dept===SUPERVISION_DEPT.key
     ? SUPERVISION_DEPT.label + ' <span class="hint">(' + INTERNAL_DEPTS.map(d=>d.label+' '+Math.round((e.splits?.[d.key]||0)*100)+'%').join(' / ') + ')</span>'
     : (INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept);
-  const actions = hasPerm('employees','edit')
-    ? `<button class="icon-btn" onclick="openEditEmployee('${e.id}')">✏️</button><button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button>`
-    : '';
+  const canEdit = hasPerm('employees','edit');
+  const canViewPayroll = hasPerm('employees','view');
+  const actions = `
+    ${canViewPayroll ? `<button class="icon-btn" title="تفاصيل الراتب" onclick="openPayrollDetail('${e.id}')">💰</button>` : ''}
+    ${canEdit ? `<button class="icon-btn" onclick="openEditEmployee('${e.id}')">✏️</button><button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button>` : ''}
+  `;
   return `<tr>
     <td>${escapeHtml(e.name)}</td>
     <td>${deptLabel}</td>
@@ -1539,10 +1852,10 @@ function saveEmployees(){
         sum += v;
       });
       if(Math.round(sum*100)!==100){ skippedSplit++; return; }
-      state.factory.employees.push({id:uid(), name, dept, salary, splits});
+      state.factory.employees.push({id:uid(), name, dept, salary, splits, payType:'monthly', weeklyRate:0, prevBalance:0, bonus:0});
       added++;
     } else {
-      state.factory.employees.push({id:uid(), name, dept, salary});
+      state.factory.employees.push({id:uid(), name, dept, salary, payType:'monthly', weeklyRate:0, prevBalance:0, bonus:0});
       added++;
     }
   });
@@ -1569,6 +1882,10 @@ function openEditEmployee(empId){
   document.getElementById('edit_emp_name').value = emp.name;
   document.getElementById('edit_emp_dept').value = emp.dept;
   document.getElementById('edit_emp_salary').value = emp.salary;
+  document.getElementById('edit_emp_paytype').value = emp.payType || 'monthly';
+  document.getElementById('edit_emp_weekly').value = emp.weeklyRate || '';
+  document.getElementById('edit_emp_prevbal').value = emp.prevBalance || '';
+  document.getElementById('edit_emp_bonus').value = emp.bonus || '';
   if(emp.dept===SUPERVISION_DEPT.key){
     INTERNAL_DEPTS.forEach(d=>{
       document.getElementById(`edit_emp_split_${d.key}`).value = Math.round((emp.splits?.[d.key]||0)*100);
@@ -1579,11 +1896,17 @@ function openEditEmployee(empId){
     });
   }
   toggleEditSplitMode();
+  toggleEditPayTypeMode();
   document.getElementById('editEmpOverlay').style.display = 'flex';
 }
 
 function closeEditEmployee(){
   document.getElementById('editEmpOverlay').style.display = 'none';
+}
+
+function toggleEditPayTypeMode(){
+  const type = document.getElementById('edit_emp_paytype').value;
+  document.getElementById('edit_emp_weekly_wrap').style.display = (type==='weekly') ? 'block' : 'none';
 }
 
 function toggleEditSplitMode(){
@@ -1614,6 +1937,10 @@ function saveEditedEmployee(){
   emp.name = name;
   emp.dept = dept;
   emp.salary = salary;
+  emp.payType = document.getElementById('edit_emp_paytype').value;
+  emp.weeklyRate = Number(document.getElementById('edit_emp_weekly').value) || 0;
+  emp.prevBalance = Number(document.getElementById('edit_emp_prevbal').value) || 0;
+  emp.bonus = Number(document.getElementById('edit_emp_bonus').value) || 0;
 
   if(dept===SUPERVISION_DEPT.key){
     const splits = {};
@@ -2388,7 +2715,7 @@ function renderAttendanceDayPanel(){
   panel.innerHTML = `
     <h3 style="margin-bottom:12px; font-size:15px;">📅 ${dk}</h3>
     ${employees.map(emp=>{
-      const rec = dayData[emp.id] || {status:null, checkIn:'', checkOut:''};
+      const rec = dayData[emp.id] || {status:null, checkIn:'', checkOut:'', otHours:0, latePen:0, earlyPen:0};
       return `
       <div class="att-row" id="attRow_${emp.id}">
         <div class="att-name">${escapeHtml(emp.name)}</div>
@@ -2412,6 +2739,12 @@ function renderAttendanceDayPanel(){
                 ${canEdit ? `<button class="icon-btn" title="الوقت الحالي" onclick="setNowTime('${emp.id}','out')">⏱</button>` : ''}
               </div>
             </div>
+            <div class="att-time-field">
+              <label>سهر (ساعة)</label>
+              <div class="att-time-input-wrap">
+                <input type="number" step="0.5" min="0" id="attOT_${emp.id}" value="${rec.otHours||''}" placeholder="0" ${!canEdit?'disabled':''} onchange="saveAttendanceOT('${emp.id}')" style="width:80px;">
+              </div>
+            </div>
           </div>
         </div>
       </div>`;
@@ -2424,8 +2757,17 @@ function ensureAttendanceSlot(empId){
   const dk = window._attendanceDayKey;
   if(!state.attendance[mk]) state.attendance[mk] = {};
   if(!state.attendance[mk][dk]) state.attendance[mk][dk] = {};
-  if(!state.attendance[mk][dk][empId]) state.attendance[mk][dk][empId] = {status:null, checkIn:'', checkOut:''};
-  return state.attendance[mk][dk][empId];
+  if(!state.attendance[mk][dk][empId]) state.attendance[mk][dk][empId] = {
+    status:null, checkIn:'', checkOut:'',
+    otHours:0, latePen:0, earlyPen:0, absPenalty:null, type:null
+  };
+  const rec = state.attendance[mk][dk][empId];
+  if(rec.otHours===undefined) rec.otHours = 0;
+  if(rec.latePen===undefined) rec.latePen = 0;
+  if(rec.earlyPen===undefined) rec.earlyPen = 0;
+  if(rec.absPenalty===undefined) rec.absPenalty = null;
+  if(rec.type===undefined) rec.type = null;
+  return rec;
 }
 
 function setAttendanceStatus(empId, status){
@@ -2460,6 +2802,13 @@ function saveAttendanceTime(empId){
   rec.checkOut = document.getElementById('attOut_'+empId).value || '';
   saveState();
   renderAttendanceView();
+}
+
+function saveAttendanceOT(empId){
+  if(!requireEdit('attendance','تسجيل الحضور')) return;
+  const rec = ensureAttendanceSlot(empId);
+  rec.otHours = Number(document.getElementById('attOT_'+empId).value) || 0;
+  saveState();
 }
 
 /* ============================================================
