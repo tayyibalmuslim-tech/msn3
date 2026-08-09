@@ -286,6 +286,44 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
   width:100%; max-width:420px; max-height:90vh; overflow-y:auto;
 }
 
+/* شاشة الدخول */
+#loginScreen{
+  position:fixed; inset:0; background:var(--paper);
+  display:flex; align-items:center; justify-content:center; z-index:500; padding:16px;
+}
+#loginScreen.hidden{display:none;}
+.login-box{
+  background:#fff; border:1px solid var(--line); border-radius:14px;
+  padding:28px 24px; width:100%; max-width:360px; box-shadow:0 8px 24px rgba(0,0,0,.08);
+}
+.login-box h2{font-size:19px; margin-bottom:4px; color:var(--ink);}
+.login-box .sub{font-size:12px; color:#8a8070; margin-bottom:18px;}
+.login-box .field{margin-bottom:12px;}
+.login-box .err{color:#c0392b; font-size:12.5px; margin-top:8px; min-height:16px;}
+#appRoot.hidden{display:none;}
+
+/* شارة اسم المستخدم + خروج */
+.user-bar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 16px; background:#fff; border-bottom:1px solid var(--line);
+  font-size:12.5px; color:#5a5248;
+}
+.user-bar button{
+  background:none; border:1px solid var(--line); border-radius:6px;
+  padding:4px 10px; font-size:12px; cursor:pointer; color:#5a5248;
+}
+.locked-msg{
+  padding:20px; text-align:center; color:#8a8070; font-size:13.5px;
+  background:#fff; border:1px dashed var(--line); border-radius:10px; margin:12px 0;
+}
+.perm-row{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; padding:8px 0; border-bottom:1px solid var(--line);
+  font-size:13.5px;
+}
+.perm-row:last-child{border-bottom:none;}
+.perm-row select{width:130px;}
+
 @media (max-width:640px){
   header.top{flex-direction:column; align-items:flex-start;}
   header.top .stats{width:100%; justify-content:space-around;}
@@ -295,7 +333,22 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 </head>
 <body>
 
-<div class="app">
+<div id="loginScreen">
+  <div class="login-box">
+    <h2>🔒 تسجيل الدخول</h2>
+    <div class="sub">تتبع الموديلات والمخزون — مصنع الملابس</div>
+    <div class="field"><label>الإيميل</label><input type="email" id="loginEmail" placeholder="you@example.com"></div>
+    <div class="field"><label>كلمة المرور</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
+    <button class="btn brass" style="width:100%; margin-top:6px;" onclick="doLogin()">دخول</button>
+    <div class="err" id="loginError"></div>
+  </div>
+</div>
+
+<div class="app hidden" id="appRoot">
+  <div class="user-bar">
+    <span id="userBarEmail"></span>
+    <button onclick="doLogout()">خروج</button>
+  </div>
   <header class="top">
     <div class="brand">
       <div class="tag">%</div>
@@ -314,6 +367,7 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
   <nav class="tabs">
     <button class="tab-btn active" data-tab="models" onclick="switchMainTab('models')">الموديلات <span class="count" id="tabCountModels">0</span></button>
     <button class="tab-btn" data-tab="settings" onclick="switchMainTab('settings')">⚙️ إعدادات المصنع والتكاليف</button>
+    <button class="tab-btn" data-tab="users" onclick="switchMainTab('users')" id="usersTabBtn" style="display:none;">👤 إدارة المستخدمين</button>
   </nav>
 
   <section class="view active" id="view-models">
@@ -324,6 +378,8 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 
   <section class="view" id="view-detail"></section>
 
+  <section class="view" id="view-users"></section>
+
   <button class="fab" id="fabAdd" title="موديل جديد">+</button>
 </div>
 
@@ -332,6 +388,109 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 </div>
 
 <div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, collection, getDocs
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAfDjhoR6ufEfjQQ4ZFQe3oCUNSl4sqXec",
+  authDomain: "msn3-ab64c.firebaseapp.com",
+  projectId: "msn3-ab64c",
+  storageBucket: "msn3-ab64c.firebasestorage.app",
+  messagingSenderId: "516912892836",
+  appId: "1:516912892836:web:6d09062dfb556f4178cf31",
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+/* كل صلاحيات التطبيق الممكنة، وكل قسم ليه view/edit */
+const PERMISSION_SECTIONS = [
+  {key:'models',  label:'الموديلات'},
+  {key:'employees', label:'الموظفين والمرتبات'},
+  {key:'factory_settings', label:'إعدادات المصنع والتكاليف'},
+  {key:'users', label:'إدارة المستخدمين'},
+];
+
+/* الوثيقة الوحيدة المشتركة اللي فيها بيانات المصنع كلها */
+const FACTORY_DOC_REF = () => doc(db, 'factory_data', 'main');
+
+window._auth = auth;
+window._db = db;
+window._fsdoc = doc; window._fsget = getDoc; window._fsset = setDoc;
+window._fscol = collection; window._fsgetdocs = getDocs;
+window._createUser = createUserWithEmailAndPassword;
+window._FACTORY_DOC_REF = FACTORY_DOC_REF;
+window._PERMISSION_SECTIONS = PERMISSION_SECTIONS;
+
+window.currentUser = null;
+window.currentPermissions = null;
+
+async function ensureUserDoc(user){
+  const uref = doc(db, 'users', user.uid);
+  const snap = await getDoc(uref);
+  if(!snap.exists()){
+    /* أول مرة يدخل بيها هذا الحساب: لو إيميله هو الأدمن المحدد، اديله كل الصلاحيات */
+    const isRootAdmin = user.email === 'mazen0000070@gmail.com';
+    const perms = {};
+    PERMISSION_SECTIONS.forEach(s=>{ perms[s.key] = isRootAdmin ? 'edit' : 'none'; });
+    await setDoc(uref, { email: user.email, permissions: perms, createdAt: Date.now() });
+    return { email: user.email, permissions: perms };
+  }
+  return snap.data();
+}
+
+function showApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appRoot').classList.remove('hidden');
+}
+function showLogin(){
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('appRoot').classList.add('hidden');
+}
+
+window.doLogin = async function(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !password){ errEl.textContent = 'اكتب الإيميل وكلمة المرور'; return; }
+  try{
+    await signInWithEmailAndPassword(auth, email, password);
+  }catch(e){
+    errEl.textContent = 'فشل الدخول — تأكد من الإيميل وكلمة المرور';
+  }
+};
+
+window.doLogout = async function(){
+  await signOut(auth);
+};
+
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+    const udoc = await ensureUserDoc(user);
+    window.currentUser = user;
+    window.currentPermissions = udoc.permissions || {};
+    document.getElementById('userBarEmail').textContent = udoc.email;
+    document.getElementById('usersTabBtn').style.display =
+      (window.currentPermissions.users==='edit') ? 'inline-block' : 'none';
+    showApp();
+    if(window.onAuthReady) window.onAuthReady();
+  } else {
+    window.currentUser = null;
+    window.currentPermissions = null;
+    showLogin();
+  }
+});
+</script>
 
 <script>
 /* ============================================================
@@ -357,7 +516,56 @@ function loadState(){
     if(!state.factory.employees) state.factory.employees = [];
   }catch(e){ console.error('فشل تحميل البيانات', e); }
 }
-function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function saveState(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  syncStateToCloud();
+}
+
+/* مزامنة سحابية مع تأخير بسيط عشان منبعتش كل حرف بيتكتب */
+let _syncTimer = null;
+function syncStateToCloud(){
+  if(!window.currentUser) return;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async ()=>{
+    try{
+      await window._fsset(window._FACTORY_DOC_REF(), {
+        data: JSON.stringify(state),
+        updatedAt: Date.now(),
+        updatedBy: window.currentUser.email
+      });
+    }catch(e){ console.error('فشلت المزامنة السحابية', e); }
+  }, 600);
+}
+
+async function loadStateFromCloud(){
+  try{
+    const snap = await window._fsget(window._FACTORY_DOC_REF());
+    if(snap.exists() && snap.data().data){
+      state = JSON.parse(snap.data().data);
+      if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
+      if(!state.factory.employees) state.factory.employees = [];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+  }catch(e){
+    console.error('فشل تحميل البيانات من السحابة، هنشتغل بالنسخة المحلية', e);
+  }
+}
+
+/* هل عندي صلاحية على قسم معيّن؟ level = 'view' أو 'edit' */
+function hasPerm(sectionKey, level){
+  const perms = window.currentPermissions || {};
+  const val = perms[sectionKey] || 'none';
+  if(level==='view') return val==='view' || val==='edit';
+  if(level==='edit') return val==='edit';
+  return false;
+}
+function requireEdit(sectionKey, actionLabel){
+  if(!hasPerm(sectionKey, 'edit')){
+    toast(`🚫 مفيش صلاحية تعديل على "${actionLabel||sectionKey}"`);
+    return false;
+  }
+  return true;
+}
 function uid(){ return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* ============================================================
@@ -441,6 +649,9 @@ function switchMainTab(tab){
   if(tab==='models'){
     document.getElementById('view-models').classList.add('active');
     renderModelGrid();
+  } else if(tab==='users'){
+    document.getElementById('view-users').classList.add('active');
+    renderUsersView();
   } else {
     document.getElementById('view-settings').classList.add('active');
     renderSettingsView();
@@ -563,8 +774,16 @@ function calcModelCost(m){
 function renderSettingsView(){
   const f = state.factory;
   const monthlyHours = getMonthlyHours();
+  const canViewFactory = hasPerm('factory_settings','view');
+  const canViewEmployees = hasPerm('employees','view');
+
+  if(!canViewFactory && !canViewEmployees){
+    document.getElementById('view-settings').innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض هذه الصفحة</div>`;
+    return;
+  }
 
   document.getElementById('view-settings').innerHTML = `
+    ${!canViewFactory ? '' : `
     <div class="panel">
       <h2><span class="title-txt">🏭 المصاريف الثابتة الشهرية</span></h2>
       <div class="form-grid">
@@ -586,34 +805,32 @@ function renderSettingsView(){
         </div>
       </div>
       <div class="hint" style="margin-top:8px;">إجمالي ساعات العمل الشهرية: <strong>${fmt(monthlyHours)} ساعة</strong></div>
-      <button class="btn brass" style="margin-top:14px;" onclick="saveFactorySettings()">حفظ</button>
+      ${hasPerm('factory_settings','edit') ? `<button class="btn brass" style="margin-top:14px;" onclick="saveFactorySettings()">حفظ</button>` : ''}
     </div>
+    `}
 
+    ${!canViewEmployees ? '' : renderEmployeesPanel(f)}
+  `;
+  window._empRowCount = 0;
+}
+
+function renderEmployeesPanel(f){
+  return `
     <div class="panel">
       <h2><span class="title-txt">👥 الموظفين والأقسام</span></h2>
       <p style="font-size:12px; color:#8a8070; margin-bottom:12px;">كل موظف تحدد قسمه (مقص/خياطة/امباج) وراتبه الشهري، عشان يتحمل بالكامل على تكلفة القسم ده. أو تختار "إشراف" لو الموظف بيشرف على أكتر من قسم، وتحدد نسبة توزيع مرتبه على الأقسام (تجمع 100%).</p>
+      ${hasPerm('employees','edit') ? `
       <div id="empRows"></div>
       <button class="btn ghost small" onclick="addEmpRow()">+ إضافة موظف</button>
       <button class="btn brass" style="margin-top:14px; display:block;" onclick="saveEmployees()">حفظ الموظفين</button>
+      ` : ''}
 
       ${f.employees.length>0 ? `
       <div class="section-divider">قائمة الموظفين الحالية</div>
       <table class="data-table">
         <thead><tr><th>الاسم</th><th>القسم</th><th>الراتب</th><th></th></tr></thead>
         <tbody>
-          ${f.employees.map(e=>`
-            <tr>
-              <td>${escapeHtml(e.name)}</td>
-              <td>${e.dept===SUPERVISION_DEPT.key
-                    ? `${SUPERVISION_DEPT.label} <span class="hint">(${INTERNAL_DEPTS.map(d=>`${d.label} ${Math.round((e.splits?.[d.key]||0)*100)}%`).join(' / ')})</span>`
-                    : (INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept)}</td>
-              <td>${fmt(e.salary)} ج</td>
-              <td style="white-space:nowrap;">
-                <button class="icon-btn" onclick="openEditEmployee('${e.id}')">✏️</button>
-                <button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button>
-              </td>
-            </tr>
-          `).join('')}
+          ${f.employees.map(e=>renderEmployeeRow(e)).join('')}
         </tbody>
       </table>` : ''}
     </div>
@@ -667,10 +884,25 @@ function renderSettingsView(){
       </div>
     </div>
   `;
-  window._empRowCount = 0;
+}
+
+function renderEmployeeRow(e){
+  const deptLabel = e.dept===SUPERVISION_DEPT.key
+    ? SUPERVISION_DEPT.label + ' <span class="hint">(' + INTERNAL_DEPTS.map(d=>d.label+' '+Math.round((e.splits?.[d.key]||0)*100)+'%').join(' / ') + ')</span>'
+    : (INTERNAL_DEPTS.find(d=>d.key===e.dept)?.label || e.dept);
+  const actions = hasPerm('employees','edit')
+    ? `<button class="icon-btn" onclick="openEditEmployee('${e.id}')">✏️</button><button class="icon-btn" onclick="deleteEmployee('${e.id}')">🗑</button>`
+    : '';
+  return `<tr>
+    <td>${escapeHtml(e.name)}</td>
+    <td>${deptLabel}</td>
+    <td>${fmt(e.salary)} ج</td>
+    <td style="white-space:nowrap;">${actions}</td>
+  </tr>`;
 }
 
 function saveFactorySettings(){
+  if(!requireEdit('factory_settings','حفظ إعدادات المصنع')) return;
   state.factory.rent = Number(document.getElementById('set_rent').value)||0;
   state.factory.electricity = Number(document.getElementById('set_electricity').value)||0;
   state.factory.workHoursPerDay = Number(document.getElementById('set_hours').value)||9;
@@ -727,6 +959,7 @@ function updateSplitSumHint(idx){
 }
 
 function saveEmployees(){
+  if(!requireEdit('employees','حفظ الموظفين')) return;
   const rows = document.querySelectorAll('#empRows .emp-row');
   let added = 0;
   let skippedSplit = 0;
@@ -761,6 +994,7 @@ function saveEmployees(){
 }
 
 function deleteEmployee(empId){
+  if(!requireEdit('employees','حذف موظف')) return;
   if(!confirm('متأكد من حذف الموظف؟')) return;
   state.factory.employees = state.factory.employees.filter(e=>e.id!==empId);
   saveState();
@@ -807,6 +1041,7 @@ function updateEditSplitSumHint(){
 }
 
 function saveEditedEmployee(){
+  if(!requireEdit('employees','تعديل موظف')) return;
   const id = document.getElementById('edit_emp_id').value;
   const emp = state.factory.employees.find(e=>e.id===id);
   if(!emp) return;
@@ -1368,10 +1603,122 @@ document.getElementById('modalOverlay').addEventListener('click', (e)=>{
 });
 
 /* ============================================================
-   بدء التشغيل
+   إدارة المستخدمين والصلاحيات
 ============================================================ */
+async function renderUsersView(){
+  const el = document.getElementById('view-users');
+  if(!hasPerm('users','view')){
+    el.innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض هذه الصفحة</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="panel"><p class="hint">... جاري التحميل</p></div>`;
+
+  let usersList = [];
+  try{
+    const snap = await window._fsgetdocs(window._fscol(window._db, 'users'));
+    snap.forEach(d=> usersList.push({ uid:d.id, ...d.data() }));
+  }catch(e){
+    el.innerHTML = `<div class="locked-msg">تعذر تحميل قائمة المستخدمين</div>`;
+    return;
+  }
+
+  const canEdit = hasPerm('users','edit');
+
+  el.innerHTML = `
+    <div class="panel">
+      <h2><span class="title-txt">👤 إضافة مستخدم جديد</span></h2>
+      ${!canEdit ? `<p class="hint">عرض فقط — مفيش صلاحية إضافة أو تعديل مستخدمين</p>` : `
+      <div class="field"><label>الإيميل</label><input type="email" id="newUserEmail" placeholder="user@example.com"></div>
+      <div class="field"><label>كلمة المرور (6 أحرف على الأقل)</label><input type="password" id="newUserPassword" placeholder="••••••••"></div>
+      <div class="section-divider" style="font-size:11px;">الصلاحيات</div>
+      ${window._PERMISSION_SECTIONS.map(s=>`
+        <div class="perm-row">
+          <span>${s.label}</span>
+          <select id="newUserPerm_${s.key}">
+            <option value="none">لا شيء</option>
+            <option value="view">مشاهدة فقط</option>
+            <option value="edit">مشاهدة وتعديل</option>
+          </select>
+        </div>
+      `).join('')}
+      <button class="btn brass" style="margin-top:14px;" onclick="createNewUser()">إنشاء المستخدم</button>
+      `}
+    </div>
+
+    <div class="panel">
+      <h2><span class="title-txt">📋 المستخدمين الحاليين (${usersList.length})</span></h2>
+      ${usersList.map(u=>`
+        <div class="section-divider">${escapeHtml(u.email)}</div>
+        ${window._PERMISSION_SECTIONS.map(s=>{
+          const val = (u.permissions && u.permissions[s.key]) || 'none';
+          return `<div class="perm-row">
+            <span>${s.label}</span>
+            ${canEdit ? `
+              <select id="permEdit_${u.uid}_${s.key}" onchange="updateUserPermission('${u.uid}','${s.key}',this.value)">
+                <option value="none" ${val==='none'?'selected':''}>لا شيء</option>
+                <option value="view" ${val==='view'?'selected':''}>مشاهدة فقط</option>
+                <option value="edit" ${val==='edit'?'selected':''}>مشاهدة وتعديل</option>
+              </select>
+            ` : `<span class="hint">${val==='none'?'لا شيء':val==='view'?'مشاهدة فقط':'مشاهدة وتعديل'}</span>`}
+          </div>`;
+        }).join('')}
+      `).join('')}
+    </div>
+  `;
+}
+
+async function createNewUser(){
+  if(!requireEdit('users','إضافة مستخدم')) return;
+  const email = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  if(!email || password.length<6){ toast('⚠️ اكتب إيميل صحيح وكلمة مرور 6 أحرف على الأقل'); return; }
+
+  const perms = {};
+  window._PERMISSION_SECTIONS.forEach(s=>{
+    perms[s.key] = document.getElementById(`newUserPerm_${s.key}`).value;
+  });
+
+  try{
+    /* ملحوظة: إنشاء المستخدم بيسجّل الدخول بحسابه تلقائياً في Firebase Auth (سلوك SDK القياسي)،
+       فبنرجع نسجّل دخول تاني بحساب الأدمن الحالي فوراً بعدها عشان الجلسة متتغيرش. */
+    const adminEmail = window.currentUser.email;
+    const cred = await window._createUser(window._auth, email, password);
+    await window._fsset(window._fsdoc(window._db, 'users', cred.user.uid), {
+      email, permissions: perms, createdAt: Date.now()
+    });
+    toast('✅ تم إنشاء المستخدم — سجل دخولك تاني بحسابك من فضلك');
+    await window._auth.signOut();
+    document.getElementById('loginEmail').value = adminEmail;
+  }catch(e){
+    toast('❌ فشل إنشاء المستخدم: ' + (e.message||''));
+  }
+}
+
+async function updateUserPermission(uid, sectionKey, newVal){
+  if(!requireEdit('users','تعديل صلاحية')) return;
+  try{
+    const uref = window._fsdoc(window._db, 'users', uid);
+    const snap = await window._fsget(uref);
+    const data = snap.data();
+    const perms = data.permissions || {};
+    perms[sectionKey] = newVal;
+    await window._fsset(uref, { ...data, permissions: perms });
+    toast('✅ اتحدثت الصلاحية');
+    if(uid===window.currentUser.uid){
+      window.currentPermissions = perms;
+      document.getElementById('usersTabBtn').style.display = (perms.users==='edit') ? 'inline-block' : 'none';
+    }
+  }catch(e){
+    toast('❌ فشل تحديث الصلاحية');
+  }
+}
+
+
 loadState();
-renderModelGrid();
+window.onAuthReady = async function(){
+  await loadStateFromCloud();
+  switchMainTab('models');
+};
 </script>
 </body>
 </html>
