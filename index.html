@@ -324,6 +324,40 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 .perm-row:last-child{border-bottom:none;}
 .perm-row select{width:130px;}
 
+/* الحضور والانصراف */
+.attendance-days-scroll{
+  display:flex; gap:6px; overflow-x:auto; padding-bottom:6px;
+}
+.attendance-day-btn{
+  flex:0 0 auto; min-width:52px; padding:8px 6px; border-radius:8px;
+  border:1.5px solid var(--line); background:#fff; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  font-family:var(--mono); font-size:13px; color:var(--ink);
+}
+.attendance-day-btn.active{border-color:var(--brass); background:rgba(184,134,63,.12); font-weight:bold;}
+.attendance-day-btn .d-mark{font-size:9px; white-space:nowrap;}
+
+.att-row{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; flex-wrap:wrap; padding:10px 0; border-bottom:1px solid var(--line);
+}
+.att-row:last-child{border-bottom:none;}
+.att-name{font-weight:600; min-width:110px;}
+.att-controls{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+.att-status-btns{display:flex; gap:6px;}
+.att-status-btn{
+  border:1.5px solid var(--line); background:#fff; border-radius:8px;
+  padding:6px 14px; font-size:12.5px; cursor:pointer; color:#5a5248;
+}
+.att-status-btn.present.active{background:#2e7d4f; border-color:#2e7d4f; color:#fff;}
+.att-status-btn.absent.active{background:#c0392b; border-color:#c0392b; color:#fff;}
+.att-status-btn:disabled{opacity:.6; cursor:default;}
+.att-times{display:flex; gap:10px;}
+.att-time-field{display:flex; flex-direction:column; gap:3px;}
+.att-time-field label{font-size:11px; color:#8a8070;}
+.att-time-input-wrap{display:flex; align-items:center; gap:4px;}
+.att-time-input-wrap input[type="time"]{padding:4px 6px; font-size:12.5px; width:100px;}
+
 @media (max-width:640px){
   header.top{flex-direction:column; align-items:flex-start;}
   header.top .stats{width:100%; justify-content:space-around;}
@@ -366,6 +400,7 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
 
   <nav class="tabs">
     <button class="tab-btn active" data-tab="models" onclick="switchMainTab('models')">الموديلات <span class="count" id="tabCountModels">0</span></button>
+    <button class="tab-btn" data-tab="attendance" onclick="switchMainTab('attendance')" id="attendanceTabBtn" style="display:none;">🕒 الحضور والانصراف</button>
     <button class="tab-btn" data-tab="settings" onclick="switchMainTab('settings')">⚙️ إعدادات المصنع والتكاليف</button>
     <button class="tab-btn" data-tab="users" onclick="switchMainTab('users')" id="usersTabBtn" style="display:none;">👤 إدارة المستخدمين</button>
   </nav>
@@ -379,6 +414,8 @@ table.data-table tfoot td{font-weight:bold; background:#fff; border-top:2px soli
   <section class="view" id="view-detail"></section>
 
   <section class="view" id="view-users"></section>
+
+  <section class="view" id="view-attendance"></section>
 
   <button class="fab" id="fabAdd" title="موديل جديد">+</button>
 </div>
@@ -416,6 +453,7 @@ const db = getFirestore(fbApp);
 const PERMISSION_SECTIONS = [
   {key:'models',  label:'الموديلات'},
   {key:'employees', label:'الموظفين والمرتبات'},
+  {key:'attendance', label:'الحضور والانصراف'},
   {key:'factory_settings', label:'إعدادات المصنع والتكاليف'},
   {key:'users', label:'إدارة المستخدمين'},
 ];
@@ -482,6 +520,8 @@ onAuthStateChanged(auth, async (user)=>{
     document.getElementById('userBarEmail').textContent = udoc.email;
     document.getElementById('usersTabBtn').style.display =
       (window.currentPermissions.users==='edit') ? 'inline-block' : 'none';
+    document.getElementById('attendanceTabBtn').style.display =
+      (window.currentPermissions.attendance==='view' || window.currentPermissions.attendance==='edit') ? 'inline-block' : 'none';
     showApp();
     if(window.onAuthReady) window.onAuthReady();
   } else {
@@ -505,7 +545,8 @@ let state = {
     workHoursPerDay: 9,
     workDaysPerMonth: 26,
     employees: [] // {id, name, dept, salary}
-  }
+  },
+  attendance: {} // { "YYYY-MM": { "YYYY-MM-DD": { empId: {status:'present'|'absent', checkIn, checkOut} } } }
 };
 
 function loadState(){
@@ -514,6 +555,7 @@ function loadState(){
     if(raw) state = JSON.parse(raw);
     if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
     if(!state.factory.employees) state.factory.employees = [];
+    if(!state.attendance) state.attendance = {};
   }catch(e){ console.error('فشل تحميل البيانات', e); }
 }
 function saveState(){
@@ -544,6 +586,7 @@ async function loadStateFromCloud(){
       state = JSON.parse(snap.data().data);
       if(!state.factory) state.factory = {rent:0, electricity:0, workHoursPerDay:9, workDaysPerMonth:26, employees:[]};
       if(!state.factory.employees) state.factory.employees = [];
+      if(!state.attendance) state.attendance = {};
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
   }catch(e){
@@ -652,6 +695,9 @@ function switchMainTab(tab){
   } else if(tab==='users'){
     document.getElementById('view-users').classList.add('active');
     renderUsersView();
+  } else if(tab==='attendance'){
+    document.getElementById('view-attendance').classList.add('active');
+    renderAttendanceView();
   } else {
     document.getElementById('view-settings').classList.add('active');
     renderSettingsView();
@@ -1707,6 +1753,7 @@ async function updateUserPermission(uid, sectionKey, newVal){
     if(uid===window.currentUser.uid){
       window.currentPermissions = perms;
       document.getElementById('usersTabBtn').style.display = (perms.users==='edit') ? 'inline-block' : 'none';
+      document.getElementById('attendanceTabBtn').style.display = (perms.attendance==='view' || perms.attendance==='edit') ? 'inline-block' : 'none';
     }
   }catch(e){
     toast('❌ فشل تحديث الصلاحية');
@@ -1714,7 +1761,178 @@ async function updateUserPermission(uid, sectionKey, newVal){
 }
 
 
-loadState();
+/* ============================================================
+   الحضور والانصراف
+============================================================ */
+const ARABIC_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+window._attendanceMonthKey = null;
+window._attendanceDayKey = null;
+
+function monthKey(y,m){ return `${y}-${String(m+1).padStart(2,'0')}`; } // m=0..11
+function dayKey(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
+
+function renderAttendanceView(){
+  const el = document.getElementById('view-attendance');
+  if(!hasPerm('attendance','view')){
+    el.innerHTML = `<div class="locked-msg">🚫 مفيش صلاحية لعرض هذه الصفحة</div>`;
+    return;
+  }
+
+  const now = new Date();
+  if(!window._attendanceMonthKey){
+    window._attendanceYear = now.getFullYear();
+    window._attendanceMonth = now.getMonth();
+  }
+  const y = window._attendanceYear, m = window._attendanceMonth;
+  window._attendanceMonthKey = monthKey(y,m);
+  if(!window._attendanceDayKey){
+    window._attendanceDayKey = dayKey(y,m, Math.min(now.getDate(), daysInMonth(y,m)));
+  }
+
+  const totalDays = daysInMonth(y,m);
+  const canEdit = hasPerm('attendance','edit');
+
+  el.innerHTML = `
+    <div class="panel">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+        <h2 style="margin:0;"><span class="title-txt">🕒 الحضور والانصراف</span></h2>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="icon-btn" onclick="shiftAttendanceMonth(-1)">◀</button>
+          <strong style="min-width:110px; text-align:center;">${ARABIC_MONTHS[m]} ${y}</strong>
+          <button class="icon-btn" onclick="shiftAttendanceMonth(1)">▶</button>
+        </div>
+      </div>
+
+      <div class="attendance-days-scroll">
+        ${Array.from({length: totalDays}, (_,i)=>i+1).map(d=>{
+          const dk = dayKey(y,m,d);
+          const active = dk===window._attendanceDayKey;
+          const dayData = (state.attendance[monthKey(y,m)]||{})[dk] || {};
+          const presentCount = Object.values(dayData).filter(v=>v.status==='present').length;
+          const absentCount = Object.values(dayData).filter(v=>v.status==='absent').length;
+          return `<button class="attendance-day-btn ${active?'active':''}" onclick="selectAttendanceDay('${dk}')">
+            <span class="d-num">${d}</span>
+            ${(presentCount||absentCount) ? `<span class="d-mark">${presentCount?`✅${presentCount}`:''}${absentCount?` ❌${absentCount}`:''}</span>` : ''}
+          </button>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="panel" id="attendanceDayPanel"></div>
+  `;
+  renderAttendanceDayPanel();
+}
+
+function shiftAttendanceMonth(delta){
+  let m = window._attendanceMonth + delta;
+  let y = window._attendanceYear;
+  if(m<0){ m=11; y--; }
+  if(m>11){ m=0; y++; }
+  window._attendanceMonth = m;
+  window._attendanceYear = y;
+  window._attendanceMonthKey = monthKey(y,m);
+  window._attendanceDayKey = dayKey(y,m,1);
+  renderAttendanceView();
+}
+
+function selectAttendanceDay(dk){
+  window._attendanceDayKey = dk;
+  renderAttendanceView();
+}
+
+function renderAttendanceDayPanel(){
+  const panel = document.getElementById('attendanceDayPanel');
+  if(!panel) return;
+  const mk = window._attendanceMonthKey;
+  const dk = window._attendanceDayKey;
+  const canEdit = hasPerm('attendance','edit');
+  const employees = state.factory.employees;
+  const dayData = (state.attendance[mk]||{})[dk] || {};
+
+  if(employees.length===0){
+    panel.innerHTML = `<div class="hint">مفيش موظفين مسجلين في إعدادات المصنع حالياً.</div>`;
+    return;
+  }
+
+  panel.innerHTML = `
+    <h3 style="margin-bottom:12px; font-size:15px;">📅 ${dk}</h3>
+    ${employees.map(emp=>{
+      const rec = dayData[emp.id] || {status:null, checkIn:'', checkOut:''};
+      return `
+      <div class="att-row" id="attRow_${emp.id}">
+        <div class="att-name">${escapeHtml(emp.name)}</div>
+        <div class="att-controls">
+          <div class="att-status-btns">
+            <button class="att-status-btn present ${rec.status==='present'?'active':''}" ${!canEdit?'disabled':''} onclick="setAttendanceStatus('${emp.id}','present')">حاضر</button>
+            <button class="att-status-btn absent ${rec.status==='absent'?'active':''}" ${!canEdit?'disabled':''} onclick="setAttendanceStatus('${emp.id}','absent')">غايب</button>
+          </div>
+          <div class="att-times" id="attTimes_${emp.id}" style="${rec.status==='present'?'':'display:none;'}">
+            <div class="att-time-field">
+              <label>دخول</label>
+              <div class="att-time-input-wrap">
+                <input type="time" id="attIn_${emp.id}" value="${rec.checkIn||''}" ${!canEdit?'disabled':''} onchange="saveAttendanceTime('${emp.id}')">
+                ${canEdit ? `<button class="icon-btn" title="الوقت الحالي" onclick="setNowTime('${emp.id}','in')">⏱</button>` : ''}
+              </div>
+            </div>
+            <div class="att-time-field">
+              <label>خروج</label>
+              <div class="att-time-input-wrap">
+                <input type="time" id="attOut_${emp.id}" value="${rec.checkOut||''}" ${!canEdit?'disabled':''} onchange="saveAttendanceTime('${emp.id}')">
+                ${canEdit ? `<button class="icon-btn" title="الوقت الحالي" onclick="setNowTime('${emp.id}','out')">⏱</button>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function ensureAttendanceSlot(empId){
+  const mk = window._attendanceMonthKey;
+  const dk = window._attendanceDayKey;
+  if(!state.attendance[mk]) state.attendance[mk] = {};
+  if(!state.attendance[mk][dk]) state.attendance[mk][dk] = {};
+  if(!state.attendance[mk][dk][empId]) state.attendance[mk][dk][empId] = {status:null, checkIn:'', checkOut:''};
+  return state.attendance[mk][dk][empId];
+}
+
+function setAttendanceStatus(empId, status){
+  if(!requireEdit('attendance','تسجيل الحضور')) return;
+  const rec = ensureAttendanceSlot(empId);
+  rec.status = status;
+  if(status==='absent'){ rec.checkIn=''; rec.checkOut=''; }
+  saveState();
+  renderAttendanceDayPanel();
+  renderAttendanceView();
+}
+
+function setNowTime(empId, which){
+  if(!requireEdit('attendance','تسجيل الحضور')) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const val = `${hh}:${mm}`;
+  const rec = ensureAttendanceSlot(empId);
+  rec.status = 'present';
+  if(which==='in') rec.checkIn = val; else rec.checkOut = val;
+  saveState();
+  renderAttendanceDayPanel();
+  renderAttendanceView();
+}
+
+function saveAttendanceTime(empId){
+  if(!requireEdit('attendance','تسجيل الحضور')) return;
+  const rec = ensureAttendanceSlot(empId);
+  rec.status = 'present';
+  rec.checkIn = document.getElementById('attIn_'+empId).value || '';
+  rec.checkOut = document.getElementById('attOut_'+empId).value || '';
+  saveState();
+  renderAttendanceView();
+}
+
+
 window.onAuthReady = async function(){
   await loadStateFromCloud();
   switchMainTab('models');
