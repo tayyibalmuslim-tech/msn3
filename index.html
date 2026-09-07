@@ -901,7 +901,20 @@ function migrateState(){
   if(!Array.isArray(state.customers)) state.customers = [];
   if(!Array.isArray(state.invoices)) state.invoices = [];
   if(!Array.isArray(state.payments)) state.payments = [];
-  state.models.forEach(m=>{ if(!m.sewingOps) m.sewingOps = []; });
+  state.models.forEach(m=>{
+    if(!m.sewingOps) m.sewingOps = [];
+    /* دفعات التشغيل الواردة من العميل — الموديلات القديمة مالهاش، فنبدأها فاضية */
+    if(!Array.isArray(m.payments)) m.payments = [];
+    /* عدد وحدات المرحلة لكل قطعة نهائية — الافتراضي 1 (وحدة = قطعة) */
+    (m.stagesPlanned||[]).forEach(sp=>{
+      if(sp.unitsPerPiece === undefined || Number(sp.unitsPerPiece) <= 0) sp.unitsPerPiece = 1;
+    });
+    /* العمال ومعاييرهم لكل مرحلة: { stageKey: [{employeeId, standard, history[]}] } */
+    if(!m.stageWorkers || typeof m.stageWorkers !== 'object') m.stageWorkers = {};
+    (m.stagesPlanned||[]).forEach(sp=>{
+      if(!Array.isArray(m.stageWorkers[sp.key])) m.stageWorkers[sp.key] = [];
+    });
+  });
   state.factory.employees.forEach(e=>{
     if(!e.payType) e.payType = 'monthly';
     if(e.weeklyRate===undefined) e.weeklyRate = 0;
@@ -980,6 +993,63 @@ const INTERNAL_DEPTS = [
   {key:'ambag',    label:'امباج (تشطيب+مكوة+تكيس)', pct:0.25},
 ];
 const SUPERVISION_DEPT = {key:'supervision', label:'إشراف'};
+
+/* ============================================================
+   معايير الإنتاج (ث/قطعة)
+   ------------------------------------------------------------
+   ساعات الدوام في الإعدادات 9، بس فيها ساعة راحة —
+   فالساعات المنتجة فعلياً 8. المعيار بيتقاس بالعداد الحي
+   ويتخزن لكل (عامل × مرحلة × موديل) لأن كل موديل صعوبته مختلفة.
+============================================================ */
+const BREAK_HOURS_PER_DAY = 1;
+function getProductiveHoursPerDay(){
+  const shift = Number(state?.factory?.workHoursPerDay) || 9;
+  return Math.max(shift - BREAK_HOURS_PER_DAY, 1);
+}
+function getProductiveSecondsPerDay(){ return getProductiveHoursPerDay() * 3600; }
+
+/* وحدات المرحلة اللي العامل ينتجها في اليوم بمعدل معياره */
+function unitsPerDayFromStandard(secPerPiece){
+  if(!secPerPiece || secPerPiece <= 0) return 0;
+  return getProductiveSecondsPerDay() / secPerPiece;
+}
+/* القطع النهائية = وحدات المرحلة ÷ عدد الوحدات لكل قطعة */
+function piecesFromUnits(units, unitsPerPiece){
+  const u = Number(unitsPerPiece) || 1;
+  return u > 0 ? units / u : 0;
+}
+function getStageUnitsPerPiece(m, stageKey){
+  const sp = (m.stagesPlanned||[]).find(s=>s.key===stageKey);
+  return Number(sp?.unitsPerPiece) || 1;
+}
+function getStageWorkers(m, stageKey){
+  if(!m.stageWorkers) m.stageWorkers = {};
+  if(!Array.isArray(m.stageWorkers[stageKey])) m.stageWorkers[stageKey] = [];
+  return m.stageWorkers[stageKey];
+}
+function getEmployeeName(id){
+  const e = (state.factory.employees||[]).find(x=>x.id===id);
+  return e ? e.name : '(موظف محذوف)';
+}
+/* الطاقة اليومية للمرحلة = مجموع طاقة كل عامل له معيار، بالقطع النهائية */
+function getStageDailyCapacity(m, stageKey){
+  const upp = getStageUnitsPerPiece(m, stageKey);
+  const workers = getStageWorkers(m, stageKey);
+  let units = 0, withStandard = 0;
+  workers.forEach(w=>{
+    if(w.standard && w.standard.secPerPiece > 0){
+      units += unitsPerDayFromStandard(w.standard.secPerPiece);
+      withStandard++;
+    }
+  });
+  return { units, pieces: piecesFromUnits(units, upp), withStandard, total: workers.length };
+}
+function fmtDuration(totalSeconds){
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  const pad = n => String(n).padStart(2,'0');
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
 const EXTERNAL_STAGES = [
   {key:'tatreez', label:'تطريز/طباعة'},
   {key:'buttons', label:'أزرار'},
@@ -1991,13 +2061,136 @@ function saveEditedEmployee(){
 }
 
 /* ============================================================
+   حماية مسودة "موديل جديد" من الضياع
+   ------------------------------------------------------------
+   المشكلة: كليك بالغلط برّه النافذة كان بيقفلها ويمسح
+   innerHTML بكل اللي اتكتب — بدون أي تحذير أو حفظ.
+   الحل: 3 طبقات — حفظ تلقائي + تأكيد قبل القفل + تعطيل
+   القفل بالكليك الخارجي أثناء فتح النموذج ده تحديداً.
+============================================================ */
+const DRAFT_KEY = 'factory_newmodel_draft_v1';
+window._newModelOpen = false;      /* هل نموذج الموديل الجديد مفتوح دلوقتي؟ */
+window._modelPayments = [];        /* دفعات التشغيل في النموذج الحالي */
+
+/* يقرأ كل حقول النموذج ويحوّلها لكائن واحد */
+function collectNewModelDraft(){
+  if(!document.getElementById('nm_name')) return null;
+  const draft = {
+    name: document.getElementById('nm_name').value,
+    price: document.getElementById('nm_price').value,
+    expected: document.getElementById('nm_expected').value,
+    colors: [],
+    stages: {},
+    payments: (window._modelPayments||[]).slice()
+  };
+  document.querySelectorAll('#colorRows .color-card').forEach(card=>{
+    const idx = card.id.split('_')[1];
+    const nameEl = document.getElementById('cr_name_'+idx);
+    if(!nameEl) return;
+    const sizes = [];
+    card.querySelectorAll(`#sizeRows_${idx} .size-row`).forEach(sRow=>{
+      sizes.push({
+        size: sRow.querySelector('select').value,
+        qty:  sRow.querySelector('input[type="number"]').value
+      });
+    });
+    draft.colors.push({
+      name:  nameEl.value,
+      hex:   document.getElementById('cr_hex_'+idx).value,
+      bolts: document.getElementById('cr_bolts_'+idx).value,
+      sizes
+    });
+  });
+  ALL_STAGES.forEach(st=>{
+    const en = document.getElementById('stage_'+st.key+'_enabled');
+    if(!en) return;
+    const costEl = document.getElementById('stage_'+st.key+'_cost');
+    const unitsEl = document.getElementById('stage_'+st.key+'_units');
+    draft.stages[st.key] = {
+      enabled: en.checked,
+      units: unitsEl ? unitsEl.value : '1',
+      time: (document.getElementById('stage_'+st.key+'_time')||{}).value || '',
+      cost: costEl ? costEl.value : ''
+    };
+  });
+  return draft;
+}
+
+/* هل المستخدم كتب أي حاجة فعلاً؟ (عشان منزعّجهوش بتأكيد على نموذج فاضي) */
+function newModelDraftHasData(draft){
+  if(!draft) return false;
+  if((draft.name||'').trim()) return true;
+  if((draft.price||'').toString().trim()) return true;
+  if((draft.expected||'').toString().trim()) return true;
+  if((draft.payments||[]).length > 0) return true;
+  const anyColor = draft.colors.some(c=>
+    (c.name||'').trim() || (c.bolts||'').toString().trim() ||
+    c.sizes.some(s=>(s.qty||'').toString().trim())
+  );
+  if(anyColor) return true;
+  return Object.values(draft.stages||{}).some(s=>
+    s.enabled || (s.time||'').toString().trim() || (s.cost||'').toString().trim()
+  );
+}
+
+/* حفظ تلقائي — بيتنادى مع كل تغيير في أي حقل */
+function saveNewModelDraft(){
+  if(!window._newModelOpen) return;
+  try{
+    const draft = collectNewModelDraft();
+    if(newModelDraftHasData(draft)){
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), draft }));
+      const badge = document.getElementById('draftBadge');
+      if(badge){
+        badge.textContent = '💾 اتحفظت مسودة';
+        badge.style.opacity = '1';
+        clearTimeout(window._draftBadgeTimer);
+        window._draftBadgeTimer = setTimeout(()=>{ badge.style.opacity = '.45'; }, 1500);
+      }
+    }
+  }catch(e){ /* لو الـlocalStorage مليان، منكسرش النموذج */ }
+}
+
+function clearNewModelDraft(){
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+}
+
+function getSavedDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.draft ? parsed : null;
+  }catch(e){ return null; }
+}
+
+/* قفل آمن: يسأل الأول لو فيه بيانات */
+async function closeAddModelModal(){
+  const draft = collectNewModelDraft();
+  if(newModelDraftHasData(draft)){
+    saveNewModelDraft();
+    const ok = await confirmDialog(
+      'فيه بيانات مكتوبة لسه متحفظتش كموديل.\n\nهقفل النافذة، بس البيانات اتحفظت كمسودة وهتلاقيها لما تفتح "موديل جديد" تاني.\n\nأقفل؟',
+      { title:'بيانات غير محفوظة', yes:'اقفل واحتفظ بالمسودة', no:'ارجع أكمّل' }
+    );
+    if(!ok) return;
+  }
+  window._newModelOpen = false;
+  closeModal();
+}
+
+/* ============================================================
    إضافة موديل جديد
 ============================================================ */
 function openAddModelModal(){
   if(!requireEdit('models','إضافة موديل')) return;
   const html = `
-    <button class="modal-close" onclick="closeModal()">✕</button>
+    <button class="modal-close" onclick="closeAddModelModal()">✕</button>
     <h3>موديل جديد</h3>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; font-size:12px;">
+      <span id="draftBadge" style="color:var(--ok, #2e7d32); opacity:.45; transition:opacity .3s;">💾 الحفظ التلقائي شغّال</span>
+      <span style="color:#8a8070;">— بياناتك بتتحفظ تلقائي، ومش هتضيع لو النافذة اتقفلت بالغلط.</span>
+    </div>
     <div class="form-grid" style="margin-bottom:16px;">
       <div class="field">
         <label>اسم الموديل</label>
@@ -2019,7 +2212,7 @@ function openAddModelModal(){
     <button class="btn ghost small" onclick="addColorRow()">+ إضافة لون</button>
 
     <div class="section-divider">مراحل الموديل والوقت المتوقع</div>
-    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">حدد المراحل اللي الموديل ده هيدخلها. الأقسام الداخلية (مقص/خياطة/امباج) تكلفتها بتتحسب تلقائي من الوقت × تكلفة الساعة. المراحل الخارجية تكتب تكلفتها يدوي.</p>
+    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">حدد المراحل اللي الموديل ده هيدخلها. الأقسام الداخلية (مقص/خياطة/امباج) تكلفتها بتتحسب تلقائي من الوقت × تكلفة الساعة. المراحل الخارجية تكتب تكلفتها يدوي.<br><strong>"وحدات لكل قطعة":</strong> كام وحدة من المرحلة دي لازمة للقطعة الواحدة. مثال: سروال فيه 4 جيوب → اكتب 4. لو المرحلة بتتعمل مرة واحدة للقطعة، سيبها 1.</p>
     <div class="form-grid">
       ${ALL_STAGES.map(st=>`
         <div class="dept-stage-box ${st.internal?'internal':'external'}">
@@ -2029,6 +2222,7 @@ function openAddModelModal(){
             <span class="badge ${st.internal?'internal':'external'}" style="margin-right:auto;">${st.internal?'داخلي':'خارجي'}</span>
           </label>
           <div style="margin-top:8px;">
+            <input type="number" id="stage_${st.key}_units" placeholder="وحدات لكل قطعة" value="1" min="0.1" step="0.1" style="margin-bottom:6px;">
             <input type="number" id="stage_${st.key}_time" placeholder="الوقت المتوقع (ساعة)" style="margin-bottom:6px;">
             ${st.internal ? `<div class="hint" id="stage_${st.key}_rate_hint">تكلفة الساعة: ${fmt(getDeptHourlyRate(st.key))} ج</div>` :
               `<input type="number" id="stage_${st.key}_cost" placeholder="التكلفة المتوقعة الكلية (ج)">`}
@@ -2037,12 +2231,172 @@ function openAddModelModal(){
       `).join('')}
     </div>
 
-    <button class="btn brass full" style="margin-top:18px;" onclick="saveNewModel()">حفظ الموديل</button>
+    <div class="section-divider">دفعات التشغيل الواردة من العميل</div>
+    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">الفلوس اللي العميل بيدفعها مقدّم عشان تشغّل الشغلانة دي. سجّل كل دفعة بمبلغها وتاريخها — العدد والمبالغ بتختلف من شغلانة لأخرى.</p>
+    <div id="paymentRows"></div>
+    <button class="btn ghost small" type="button" onclick="addPaymentRow()">+ إضافة دفعة</button>
+
+    <div style="display:flex; gap:10px; margin-top:18px;">
+      <button class="btn brass" style="flex:1;" onclick="saveNewModel()">حفظ الموديل</button>
+      <button class="btn ghost" type="button" onclick="closeAddModelModal()">إلغاء</button>
+    </div>
   `;
   document.getElementById('modalContent').innerHTML = html;
   document.getElementById('modalOverlay').classList.add('active');
   window._colorRowCount = 0;
+  window._newModelOpen = true;
+  window._modelPayments = [];
+
+  /* استرجاع المسودة لو موجودة */
+  const saved = getSavedDraft();
+  if(saved){
+    const when = new Date(saved.savedAt);
+    const timeTxt = when.toLocaleString('ar-EG', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
+    const bar = document.createElement('div');
+    bar.id = 'draftRestoreBar';
+    bar.style.cssText = 'background:#fff7e6; border:1.5px solid #e0a800; border-radius:10px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;';
+    bar.innerHTML = `
+      <span style="font-size:13px; flex:1; min-width:180px;">📄 فيه مسودة محفوظة من <strong>${escapeHtml(timeTxt)}</strong> — تحب تكمّل عليها؟</span>
+      <button class="btn small brass" type="button" onclick="restoreNewModelDraft()">استرجاع المسودة</button>
+      <button class="btn small ghost" type="button" onclick="discardNewModelDraft()">ابدأ من جديد</button>
+    `;
+    const content = document.getElementById('modalContent');
+    content.insertBefore(bar, content.querySelector('h3').nextSibling);
+  }
+
   addColorRow(); addColorRow();
+  attachDraftListeners();
+}
+
+/* ---------- دفعات التشغيل ---------- */
+function addPaymentRow(payment){
+  const p = payment || { id: uid(), amount:'', date: todayStr(), note:'' };
+  if(!payment) window._modelPayments.push(p);
+  renderPaymentRows();
+}
+
+function removePaymentRow(id){
+  window._modelPayments = window._modelPayments.filter(p=>p.id!==id);
+  renderPaymentRows();
+  saveNewModelDraft();
+}
+
+function updatePaymentField(id, field, value){
+  const p = window._modelPayments.find(x=>x.id===id);
+  if(p){ p[field] = value; }
+  const total = window._modelPayments.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  const totEl = document.getElementById('paymentsTotal');
+  if(totEl) totEl.textContent = `إجمالي الدفعات: ${fmt(total)} ج`;
+  saveNewModelDraft();
+}
+
+function renderPaymentRows(){
+  const wrap = document.getElementById('paymentRows');
+  if(!wrap) return;
+  const list = window._modelPayments || [];
+  const total = list.reduce((s,x)=>s+(Number(x.amount)||0),0);
+  if(list.length===0){
+    wrap.innerHTML = `<div style="font-size:12px; color:#8a8070; padding:8px 0;">مفيش دفعات مسجّلة. اضغط "إضافة دفعة" لو العميل دفع مقدّم.</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="data-table" style="margin-bottom:10px;">
+      <thead><tr><th>المبلغ (ج)</th><th>التاريخ</th><th>ملاحظة</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(p=>`
+          <tr>
+            <td><input type="number" value="${escapeHtml(String(p.amount||''))}" placeholder="5000"
+                 oninput="updatePaymentField('${p.id}','amount',this.value)"
+                 style="width:110px; padding:7px 9px; border:1.5px solid var(--line); border-radius:6px;"></td>
+            <td><input type="date" value="${escapeHtml(p.date||'')}"
+                 onchange="updatePaymentField('${p.id}','date',this.value)"
+                 style="padding:7px 9px; border:1.5px solid var(--line); border-radius:6px;"></td>
+            <td><input type="text" value="${escapeHtml(p.note||'')}" placeholder="مثال: مقدّم خيوط"
+                 oninput="updatePaymentField('${p.id}','note',this.value)"
+                 style="width:100%; min-width:120px; padding:7px 9px; border:1.5px solid var(--line); border-radius:6px;"></td>
+            <td><button class="icon-btn" type="button" onclick="removePaymentRow('${p.id}')">🗑</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    <div class="size-total" id="paymentsTotal">إجمالي الدفعات: ${fmt(total)} ج</div>
+  `;
+}
+
+/* ---------- ربط الحفظ التلقائي بكل الحقول ---------- */
+function attachDraftListeners(){
+  const content = document.getElementById('modalContent');
+  if(!content) return;
+  content.removeEventListener('input', saveNewModelDraft);
+  content.removeEventListener('change', saveNewModelDraft);
+  content.addEventListener('input', saveNewModelDraft);
+  content.addEventListener('change', saveNewModelDraft);
+}
+
+function restoreNewModelDraft(){
+  const saved = getSavedDraft();
+  if(!saved){ toast('مفيش مسودة محفوظة'); return; }
+  const d = saved.draft;
+  document.getElementById('nm_name').value     = d.name || '';
+  document.getElementById('nm_price').value    = d.price || '';
+  document.getElementById('nm_expected').value = d.expected || '';
+
+  /* إعادة بناء الألوان */
+  document.getElementById('colorRows').innerHTML = '';
+  window._colorRowCount = 0;
+  (d.colors||[]).forEach(c=>{
+    addColorRow();
+    const idx = window._colorRowCount;
+    document.getElementById('cr_name_'+idx).value  = c.name || '';
+    document.getElementById('cr_hex_'+idx).value   = c.hex || '#cccccc';
+    document.getElementById('cr_bolts_'+idx).value = c.bolts || '';
+    document.getElementById('sizeRows_'+idx).innerHTML = '';
+    window['_sizeRowCount_'+idx] = 0;
+    (c.sizes||[]).forEach(s=>{
+      addSizeRowToColor(idx);
+      const sIdx = window['_sizeRowCount_'+idx];
+      const sel = document.getElementById(`size_sel_${idx}_${sIdx}`);
+      const qty = document.getElementById(`size_qty_${idx}_${sIdx}`);
+      if(sel) sel.value = s.size || sel.value;
+      if(qty) qty.value = s.qty || '';
+    });
+    if((c.sizes||[]).length===0) addSizeRowToColor(idx);
+    updateColorSizeTotal(idx);
+  });
+  if((d.colors||[]).length===0){ addColorRow(); addColorRow(); }
+
+  /* إعادة بناء المراحل */
+  Object.keys(d.stages||{}).forEach(key=>{
+    const s = d.stages[key];
+    const en = document.getElementById('stage_'+key+'_enabled');
+    if(en) en.checked = !!s.enabled;
+    const u = document.getElementById('stage_'+key+'_units');
+    if(u) u.value = (s.units === undefined || s.units === '') ? '1' : s.units;
+    const t = document.getElementById('stage_'+key+'_time');
+    if(t) t.value = s.time || '';
+    const c = document.getElementById('stage_'+key+'_cost');
+    if(c) c.value = s.cost || '';
+  });
+
+  /* إعادة بناء الدفعات */
+  window._modelPayments = (d.payments||[]).map(p=>({
+    id: p.id || uid(), amount: p.amount || '', date: p.date || todayStr(), note: p.note || ''
+  }));
+  renderPaymentRows();
+
+  const bar = document.getElementById('draftRestoreBar');
+  if(bar) bar.remove();
+  toast('تم استرجاع المسودة ✓');
+}
+
+async function discardNewModelDraft(){
+  const ok = await confirmDialog('هتمسح المسودة المحفوظة نهائياً وتبدأ من فاضي. متأكد؟',
+    { title:'مسح المسودة', yes:'امسح وابدأ من جديد', no:'إلغاء', danger:true });
+  if(!ok) return;
+  clearNewModelDraft();
+  const bar = document.getElementById('draftRestoreBar');
+  if(bar) bar.remove();
+  toast('تم مسح المسودة');
 }
 
 function addColorRow(){
@@ -2135,22 +2489,42 @@ function saveNewModel(){
 
   const stagesPlanned = [];
   const stageLogs = {};
+  const stageWorkers = {};
   ALL_STAGES.forEach(st=>{
     const enabled = document.getElementById('stage_'+st.key+'_enabled').checked;
     if(!enabled) return;
     const time = Number(document.getElementById('stage_'+st.key+'_time').value)||0;
     const cost = st.internal ? null : (Number(document.getElementById('stage_'+st.key+'_cost').value)||0);
-    stagesPlanned.push({key:st.key, label:st.label, internal:st.internal, expectedTime:time, expectedCost:cost});
+    const unitsEl = document.getElementById('stage_'+st.key+'_units');
+    const units = Math.max(Number(unitsEl ? unitsEl.value : 1) || 1, 0.1);
+    stagesPlanned.push({key:st.key, label:st.label, internal:st.internal, expectedTime:time, expectedCost:cost, unitsPerPiece:units});
     stageLogs[st.key] = [];
+    stageWorkers[st.key] = [];
   });
   if(stagesPlanned.length===0){ toast('حدد مرحلة واحدة على الأقل للموديل'); return; }
 
+  /* دفعات التشغيل الواردة من العميل — نتجاهل الصفوف الفاضية */
+  const payments = (window._modelPayments||[])
+    .filter(p=>Number(p.amount) > 0)
+    .map(p=>({
+      id: p.id || uid(),
+      amount: Number(p.amount) || 0,
+      date: p.date || todayStr(),
+      note: (p.note||'').trim(),
+      createdAt: Date.now()
+    }));
+
   const model = {
     id: uid(), name, sellPrice:price, expectedTotal:expected,
-    colors, stagesPlanned, cutParts:[], stageLogs, sewingOps:[], createdAt: Date.now()
+    colors, stagesPlanned, cutParts:[], stageLogs, stageWorkers, sewingOps:[],
+    payments, createdAt: Date.now()
   };
   state.models.push(model);
   saveState();
+  /* الموديل اتحفظ بنجاح — المسودة بقت مالهاش لزمة */
+  clearNewModelDraft();
+  window._newModelOpen = false;
+  window._modelPayments = [];
   closeModal();
   renderModelGrid();
   toast('تم إنشاء الموديل ✓');
@@ -2158,6 +2532,10 @@ function saveNewModel(){
 }
 
 function closeModal(){
+  /* شبكة أمان: لو أي كود تاني قفل المودال والنموذج مفتوح، نصفّر الحالة.
+     المسودة نفسها بتكون اتحفظت تلقائي، فالبيانات مش بتضيع. */
+  window._newModelOpen = false;
+  if(window._measure){ clearInterval(window._measureTimer); window._measure = null; }
   document.getElementById('modalOverlay').classList.remove('active');
   document.getElementById('modalContent').innerHTML = '';
 }
@@ -2204,6 +2582,7 @@ function renderModelDetail(){
       <div class="stage-tab ${currentDetailTab==='overview'?'active':''}" onclick="switchDetailTab('overview')">نظرة عامة</div>
       <div class="stage-tab ${currentDetailTab==='receiving'?'active':''}" onclick="switchDetailTab('receiving')">استلام المخزون</div>
       <div class="stage-tab ${currentDetailTab==='cutting'?'active':''}" onclick="switchDetailTab('cutting')">بعد القص</div>
+      <div class="stage-tab ${currentDetailTab==='workers'?'active':''}" onclick="switchDetailTab('workers')">⏱️ العمال والمعايير</div>
       ${(m.stagesPlanned||[]).map(sp=>{
         const hasLogs = (m.stageLogs[sp.key]||[]).length>0;
         return `<div class="stage-tab ${currentDetailTab===sp.key?'active':''} ${hasLogs?'done-marker':''}" onclick="switchDetailTab('${sp.key}')">${sp.label}</div>`;
@@ -2216,6 +2595,7 @@ function renderModelDetail(){
   if(currentDetailTab==='overview') bodyHtml = renderOverviewTab(m, cost);
   else if(currentDetailTab==='receiving') bodyHtml = renderReceivingTab(m);
   else if(currentDetailTab==='cutting') bodyHtml = renderCuttingTab(m);
+  else if(currentDetailTab==='workers') bodyHtml = renderWorkersTab(m);
   else if(currentDetailTab==='cost' && canFinance) bodyHtml = renderCostTab(m, cost);
   else if(currentDetailTab==='cost'){ currentDetailTab='overview'; bodyHtml = renderOverviewTab(m, cost); }
   else bodyHtml = renderStageLogTab(m, currentDetailTab);
@@ -2294,12 +2674,357 @@ function renderOverviewTab(m, cost){
         `;
       }).join('')}
     </div>
+    ${canFinance ? renderModelPaymentsPanel(m) : ''}
+
     <div class="panel">
       <h2>حذف الموديل</h2>
       <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">الإجراء ده نهائي وهيمسح كل بيانات الموديل.</p>
       <button class="btn danger small" onclick="deleteModel()">حذف الموديل نهائياً</button>
     </div>
   `;
+}
+
+/* ============================================================
+   تبويب العمال والمعايير
+============================================================ */
+function renderWorkersTab(m){
+  const canEdit = hasPerm('models','edit');
+  const stages = (m.stagesPlanned||[]).filter(sp=>sp.internal);
+  const prodHours = getProductiveHoursPerDay();
+
+  if(stages.length===0){
+    return `<div class="panel"><h2>العمال والمعايير</h2>
+      <div style="font-size:13px; color:#8a8070;">الموديل ده مفيهوش مراحل داخلية (مقص/خياطة/امباج)، فمفيش عمال يتسجلوا عليه.</div></div>`;
+  }
+
+  const bottleneck = stages
+    .map(sp=>({ sp, cap: getStageDailyCapacity(m, sp.key) }))
+    .filter(x=>x.cap.withStandard > 0)
+    .sort((a,b)=>a.cap.pieces - b.cap.pieces)[0];
+
+  return `
+    <div class="panel">
+      <h2><span class="title-txt">⏱️ الطاقة اليومية للموديل</span></h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:12px;">
+        الحساب مبني على <strong>${fmt(prodHours)} ساعات إنتاج فعلية</strong> في اليوم
+        (${fmt(Number(state.factory.workHoursPerDay)||9)} ساعة دوام − ${fmt(BREAK_HOURS_PER_DAY)} ساعة راحة).
+      </p>
+      ${bottleneck ? `
+        <div style="background:#fff7e6; border:1.5px solid #e0a800; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:13px;">
+          🚧 <strong>الاختناق:</strong> مرحلة <strong>${escapeHtml(bottleneck.sp.label)}</strong> — أبطأ مرحلة بطاقة
+          <strong>${fmt(Math.floor(bottleneck.cap.pieces))} قطعة/يوم</strong>.
+          الموديل كله مش هيعدّي الرقم ده مهما كانت باقي المراحل أسرع.
+          ${m.expectedTotal>0 && bottleneck.cap.pieces>0
+            ? `<br>الطلبية ${fmt(m.expectedTotal)} قطعة → محتاجة تقريباً <strong>${fmt(Math.ceil(m.expectedTotal/bottleneck.cap.pieces))} يوم</strong>.`
+            : ''}
+        </div>` : `
+        <div style="font-size:13px; color:#8a8070; margin-bottom:14px;">لسه مفيش معايير مسجلة. قيس معيار عامل واحد على الأقل عشان تشوف الطاقة والاختناق.</div>`}
+      <table class="data-table">
+        <thead><tr><th>المرحلة</th><th>وحدات/قطعة</th><th>عمال</th><th>الطاقة (وحدة/يوم)</th><th>الطاقة (قطعة/يوم)</th></tr></thead>
+        <tbody>
+          ${stages.map(sp=>{
+            const cap = getStageDailyCapacity(m, sp.key);
+            const isBn = bottleneck && bottleneck.sp.key===sp.key;
+            return `<tr${isBn?' style="background:#fff7e6;"':''}>
+              <td><strong>${escapeHtml(sp.label)}</strong>${isBn?' 🚧':''}</td>
+              <td>×${fmt(sp.unitsPerPiece||1)}</td>
+              <td>${cap.withStandard}/${cap.total} لهم معيار</td>
+              <td>${cap.withStandard?fmt(Math.floor(cap.units)):'—'}</td>
+              <td><strong>${cap.withStandard?fmt(Math.floor(cap.pieces)):'—'}</strong></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    ${stages.map(sp=>renderStageWorkersPanel(m, sp, canEdit)).join('')}
+  `;
+}
+
+function renderStageWorkersPanel(m, sp, canEdit){
+  const workers = getStageWorkers(m, sp.key);
+  const upp = Number(sp.unitsPerPiece)||1;
+  /* موظفي القسم ده اللي لسه مضافوش — والإشراف يقدر يشتغل على أي قسم */
+  const available = (state.factory.employees||[]).filter(e=>
+    (e.dept===sp.key || e.dept===SUPERVISION_DEPT.key) &&
+    !workers.some(w=>w.employeeId===e.id)
+  );
+
+  return `
+    <div class="panel">
+      <h2><span class="title-txt">${escapeHtml(sp.label)}</span>
+        <span class="badge pending" style="margin-right:8px;">وحدات/قطعة: ×${fmt(upp)}</span></h2>
+
+      ${canEdit ? `
+        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px;">
+          <div class="field" style="flex:1; min-width:180px; margin:0;">
+            <label>عدد الوحدات لكل قطعة</label>
+            <input type="number" id="upp_${sp.key}" value="${upp}" min="0.1" step="0.1">
+          </div>
+          <button class="btn ghost small" onclick="updateStageUnitsPerPiece('${sp.key}')">حفظ</button>
+        </div>` : ''}
+
+      ${workers.length===0
+        ? `<div style="font-size:13px; color:#8a8070; margin-bottom:12px;">مفيش عمال مسجلين على المرحلة دي.</div>`
+        : `<table class="data-table" style="margin-bottom:12px;">
+            <thead><tr><th>العامل</th><th>المعيار</th><th>وحدة/يوم</th><th>قطعة/يوم</th><th></th></tr></thead>
+            <tbody>
+              ${workers.map(w=>{
+                const has = w.standard && w.standard.secPerPiece>0;
+                const units = has ? unitsPerDayFromStandard(w.standard.secPerPiece) : 0;
+                const hist = (w.history||[]).length;
+                return `<tr>
+                  <td><strong>${escapeHtml(getEmployeeName(w.employeeId))}</strong>
+                    ${hist?`<div class="hint">${hist} قياس سابق</div>`:''}</td>
+                  <td>${has
+                    ? `<span class="badge ok">${fmt(w.standard.secPerPiece.toFixed(1))} ث/وحدة</span>
+                       <div class="hint">${fmt(w.standard.pieceCount)} وحدة في ${fmtDuration(w.standard.totalSeconds)}</div>`
+                    : `<span class="badge pending">لسه مفيش معيار</span>`}</td>
+                  <td>${has?fmt(Math.floor(units)):'—'}</td>
+                  <td><strong>${has?fmt(Math.floor(piecesFromUnits(units, upp))):'—'}</strong></td>
+                  <td style="white-space:nowrap;">
+                    ${canEdit?`<button class="btn small ${has?'ghost':'brass'}" onclick="startStandardMeasurement('${sp.key}','${w.employeeId}')">${has?'🔄 إعادة قياس':'📏 قياس'}</button>`:''}
+                    ${canEdit?`<button class="icon-btn" onclick="removeStageWorker('${sp.key}','${w.employeeId}')">🗑</button>`:''}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`}
+
+      ${canEdit ? (available.length===0
+        ? `<div class="hint">${(state.factory.employees||[]).some(e=>e.dept===sp.key)
+            ? 'كل موظفي القسم مضافين بالفعل على المرحلة دي.'
+            : 'مفيش موظفين مسجلين في القسم ده. ضيفهم من "إعدادات المصنع" الأول.'}</div>`
+        : `<div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+            <div class="field" style="flex:1; min-width:180px; margin:0;">
+              <label>إضافة عامل للمرحلة</label>
+              <select id="addw_${sp.key}">
+                ${available.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('')}
+              </select>
+            </div>
+            <button class="btn brass small" onclick="addStageWorker('${sp.key}')">+ إضافة</button>
+          </div>`) : ''}
+    </div>
+  `;
+}
+
+function updateStageUnitsPerPiece(stageKey){
+  if(!requireEdit('models','تعديل المرحلة')) return;
+  const m = getCurrentModel(); if(!m) return;
+  const sp = (m.stagesPlanned||[]).find(s=>s.key===stageKey); if(!sp) return;
+  const v = Number(document.getElementById('upp_'+stageKey).value);
+  if(!v || v<=0){ toast('اكتب رقم أكبر من صفر'); return; }
+  sp.unitsPerPiece = v;
+  saveState();
+  toast('تم التحديث ✓');
+  renderModelDetail();
+}
+
+function addStageWorker(stageKey){
+  if(!requireEdit('models','إضافة عامل')) return;
+  const m = getCurrentModel(); if(!m) return;
+  const employeeId = document.getElementById('addw_'+stageKey).value;
+  if(!employeeId){ toast('اختر عامل'); return; }
+  const workers = getStageWorkers(m, stageKey);
+  if(workers.some(w=>w.employeeId===employeeId)){ toast('العامل ده مضاف بالفعل'); return; }
+  workers.push({ employeeId, standard:null, history:[] });
+  saveState();
+  toast('تمت الإضافة ✓');
+  renderModelDetail();
+}
+
+async function removeStageWorker(stageKey, employeeId){
+  if(!requireEdit('models','حذف عامل')) return;
+  const m = getCurrentModel(); if(!m) return;
+  const ok = await confirmDialog(
+    `هتشيل ${getEmployeeName(employeeId)} من المرحلة دي، وهيتمسح معياره وكل قياساته السابقة على الموديل ده.`,
+    { title:'إزالة عامل', yes:'شيله', no:'إلغاء', danger:true });
+  if(!ok) return;
+  m.stageWorkers[stageKey] = getStageWorkers(m, stageKey).filter(w=>w.employeeId!==employeeId);
+  saveState();
+  toast('تم الحذف');
+  renderModelDetail();
+}
+
+/* ---------- عداد قياس المعيار ---------- */
+window._measure = null;   /* {stageKey, employeeId, marks:[], startTime} */
+window._measureTimer = null;
+
+function startStandardMeasurement(stageKey, employeeId){
+  if(!requireEdit('models','قياس معيار')) return;
+  window._measure = { stageKey, employeeId, marks:[], startTime:Date.now() };
+  renderMeasureModal();
+}
+
+function renderMeasureModal(){
+  const m = getCurrentModel(); if(!m || !window._measure) return;
+  const sp = (m.stagesPlanned||[]).find(s=>s.key===window._measure.stageKey);
+  document.getElementById('modalContent').innerHTML = `
+    <button class="modal-close" onclick="cancelMeasurement()">✕</button>
+    <h3>📏 قياس معيار — ${escapeHtml(getEmployeeName(window._measure.employeeId))}</h3>
+    <div style="text-align:center; font-size:12px; color:#8a8070; margin-bottom:6px;">
+      ${escapeHtml(m.name)} — ${escapeHtml(sp?sp.label:'')}
+    </div>
+    <div style="text-align:center; padding:18px 0;">
+      <div id="msCount" style="font-size:60px; font-weight:800; line-height:1; color:var(--brass, #b8860b);">0</div>
+      <div style="font-size:13px; color:#8a8070; margin-top:6px;">وحدة</div>
+      <div id="msClock" style="font-size:22px; color:#8a8070; margin-top:10px; font-variant-numeric:tabular-nums;">00:00</div>
+      <div id="msRate" style="font-size:13px; color:#8a8070; margin-top:6px;">السرعة هتظهر بعد أول وحدة</div>
+    </div>
+    <button class="btn green full" style="padding:26px; font-size:20px; font-weight:800;" onclick="markPiece()">✅ أنتج وحدة</button>
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <button class="btn ghost" style="flex:1;" onclick="undoPiece()">↩️ تراجع</button>
+      <button class="btn ghost" style="flex:1;" onclick="cancelMeasurement()">إلغاء</button>
+    </div>
+    <button class="btn brass full" style="margin-top:10px;" onclick="finishMeasurement()">⏹ إنهاء واعتماد المعيار</button>
+    <p style="font-size:11px; color:#8a8070; margin-top:12px; line-height:1.6;">
+      ⚠️ العامل عارف إنه بيتقاس، فغالباً هيشتغل أسرع من المعتاد. خد القياس على عدد وحدات محترم (20+) عشان الرقم يبقى واقعي.
+    </p>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+  clearInterval(window._measureTimer);
+  window._measureTimer = setInterval(updateMeasureDisplay, 1000);
+  updateMeasureDisplay();
+}
+
+function updateMeasureDisplay(){
+  if(!window._measure){ clearInterval(window._measureTimer); return; }
+  const elapsed = (Date.now() - window._measure.startTime)/1000;
+  const n = window._measure.marks.length;
+  const c = document.getElementById('msCount'); if(c) c.textContent = fmt(n);
+  const k = document.getElementById('msClock'); if(k) k.textContent = fmtDuration(elapsed);
+  const r = document.getElementById('msRate');
+  if(r){
+    if(n===0){ r.textContent = 'السرعة هتظهر بعد أول وحدة'; }
+    else {
+      const per = elapsed/n;
+      r.innerHTML = `متوسط <strong>${fmt(per.toFixed(1))} ث/وحدة</strong> — يعني ${fmt(Math.floor(unitsPerDayFromStandard(per)))} وحدة في اليوم`;
+    }
+  }
+}
+
+function markPiece(){
+  if(!window._measure) return;
+  window._measure.marks.push(Date.now());
+  updateMeasureDisplay();
+}
+function undoPiece(){
+  if(!window._measure || window._measure.marks.length===0){ toast('مفيش وحدات لسه'); return; }
+  window._measure.marks.pop();
+  updateMeasureDisplay();
+}
+
+async function cancelMeasurement(){
+  if(window._measure && window._measure.marks.length>0){
+    const ok = await confirmDialog('هتلغي جلسة القياس ومش هيتحفظ أي حاجة. متأكد؟',
+      { title:'إلغاء القياس', yes:'ألغِ الجلسة', no:'ارجع أكمّل', danger:true });
+    if(!ok) return;
+  }
+  clearInterval(window._measureTimer);
+  window._measure = null;
+  closeModal();
+}
+
+async function finishMeasurement(){
+  if(!window._measure) return;
+  const n = window._measure.marks.length;
+  if(n===0){ toast('سجّل وحدة واحدة على الأقل'); return; }
+  const totalSeconds = Math.round((Date.now() - window._measure.startTime)/1000);
+  const secPerPiece = totalSeconds / n;
+
+  const m = getCurrentModel(); if(!m) return;
+  const upp = getStageUnitsPerPiece(m, window._measure.stageKey);
+  const perDay = unitsPerDayFromStandard(secPerPiece);
+
+  const ok = await confirmDialog(
+    `المعيار: ${secPerPiece.toFixed(1)} ث/وحدة (من ${n} وحدة في ${fmtDuration(totalSeconds)}).\n` +
+    `يعني ${Math.floor(perDay)} وحدة/يوم = ${Math.floor(piecesFromUnits(perDay, upp))} قطعة/يوم.\n\nأعتمده؟`,
+    { title:'اعتماد المعيار', yes:'اعتمد', no:'إلغاء' });
+  if(!ok) return;
+
+  const worker = getStageWorkers(m, window._measure.stageKey)
+    .find(w=>w.employeeId===window._measure.employeeId);
+  if(worker){
+    /* القياس القديم بيتحفظ في التاريخ بدل ما يتمسح */
+    if(worker.standard){
+      if(!Array.isArray(worker.history)) worker.history = [];
+      worker.history.push(worker.standard);
+    }
+    worker.standard = { pieceCount:n, totalSeconds, secPerPiece, recordedAt: Date.now() };
+    saveState();
+    toast('تم اعتماد المعيار ✓');
+  }
+  clearInterval(window._measureTimer);
+  window._measure = null;
+  closeModal();
+  renderModelDetail();
+}
+
+/* ---------- دفعات التشغيل داخل صفحة الموديل ---------- */
+function renderModelPaymentsPanel(m){
+  const canEdit = hasPerm('models','edit') && hasPerm('finance','view');
+  const list = (m.payments||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const total = list.reduce((s,p)=>s+(Number(p.amount)||0),0);
+  return `
+    <div class="panel">
+      <h2><span class="title-txt">💵 دفعات التشغيل الواردة من العميل</span></h2>
+      <p style="font-size:12px; color:#8a8070; margin-bottom:12px;">الفلوس اللي العميل دفعها مقدّم لتشغيل الشغلانة دي.</p>
+      ${list.length===0
+        ? `<div style="font-size:13px; color:#8a8070; margin-bottom:12px;">مفيش دفعات مسجّلة للموديل ده.</div>`
+        : `<table class="data-table" style="margin-bottom:12px;">
+            <thead><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th>${canEdit?'<th></th>':''}</tr></thead>
+            <tbody>
+              ${list.map(p=>`
+                <tr>
+                  <td>${escapeHtml(p.date||'—')}</td>
+                  <td><strong>${fmt(p.amount)} ج</strong></td>
+                  <td>${escapeHtml(p.note||'—')}</td>
+                  ${canEdit?`<td><button class="icon-btn" onclick="deleteModelPayment('${p.id}')">🗑</button></td>`:''}
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot><tr><td>الإجمالي</td><td colspan="${canEdit?3:2}">${fmt(total)} ج</td></tr></tfoot>
+          </table>`}
+      ${canEdit ? `
+        <div class="form-grid" style="align-items:end;">
+          <div class="field"><label>المبلغ (ج)</label><input type="number" id="mp_amount" placeholder="5000"></div>
+          <div class="field"><label>التاريخ</label><input type="date" id="mp_date" value="${todayStr()}"></div>
+          <div class="field"><label>ملاحظة</label><input type="text" id="mp_note" placeholder="مثال: مقدّم خيوط"></div>
+        </div>
+        <button class="btn brass small" style="margin-top:12px;" onclick="addModelPayment()">+ إضافة دفعة</button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function addModelPayment(){
+  if(!requireEdit('models','إضافة دفعة')) return;
+  const m = state.models.find(x=>x.id===currentModelId);
+  if(!m) return;
+  const amount = Number(document.getElementById('mp_amount').value);
+  const date = document.getElementById('mp_date').value || todayStr();
+  const note = document.getElementById('mp_note').value.trim();
+  if(!amount || amount<=0){ toast('اكتب مبلغ صحيح'); return; }
+  if(!Array.isArray(m.payments)) m.payments = [];
+  m.payments.push({ id:uid(), amount, date, note, createdAt:Date.now() });
+  saveState();
+  toast('تمت إضافة الدفعة ✓');
+  renderModelDetail();
+}
+
+async function deleteModelPayment(paymentId){
+  if(!requireEdit('models','حذف دفعة')) return;
+  const m = state.models.find(x=>x.id===currentModelId);
+  if(!m) return;
+  const p = (m.payments||[]).find(x=>x.id===paymentId);
+  if(!p) return;
+  const ok = await confirmDialog(`هتمسح دفعة ${fmt(p.amount)} ج بتاريخ ${p.date}؟`,
+    { title:'حذف دفعة', yes:'احذف', no:'إلغاء', danger:true });
+  if(!ok) return;
+  m.payments = m.payments.filter(x=>x.id!==paymentId);
+  saveState();
+  toast('تم حذف الدفعة');
+  renderModelDetail();
 }
 
 function deleteModel(){
@@ -2526,7 +3251,32 @@ function renderCostTab(m, cost){
 ============================================================ */
 document.getElementById('fabAdd').addEventListener('click', openAddModelModal);
 document.getElementById('modalOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'modalOverlay') closeModal();
+  if(e.target.id !== 'modalOverlay') return;
+  /* نموذج "موديل جديد" مبيتقفلش بالكليك الخارجي — ده كان بيمسح شغل ساعة
+     في كليك واحد بالغلط. القفل بيتم من زر ✕ أو "إلغاء" أو Esc، وكلهم
+     بيمروا على closeAddModelModal اللي بيسأل ويحفظ المسودة. */
+  if(window._newModelOpen){ closeAddModelModal(); return; }
+  if(window._measure){ cancelMeasurement(); return; }
+  closeModal();
+});
+
+/* زر Esc يقفل المودال — وبيمر على المسار الآمن لو فيه شغل مش متحفظ */
+document.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Escape') return;
+  const overlay = document.getElementById('modalOverlay');
+  if(!overlay || !overlay.classList.contains('active')) return;
+  if(window._newModelOpen){ closeAddModelModal(); return; }
+  if(window._measure){ cancelMeasurement(); return; }
+  closeModal();
+});
+
+/* مسافة أو Enter = "أنتج وحدة" أثناء القياس — أسرع بكتير من الدوس بالماوس */
+document.addEventListener('keydown', (e)=>{
+  if(!window._measure) return;
+  if(e.key !== ' ' && e.key !== 'Enter') return;
+  if(['INPUT','TEXTAREA','SELECT'].includes((e.target.tagName||'').toUpperCase())) return;
+  e.preventDefault();
+  markPiece();
 });
 
 /* ============================================================
