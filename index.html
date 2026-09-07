@@ -222,7 +222,7 @@ button.btn.full{width:100%;}
   padding:18px 20px; background:var(--surface-2); border-radius:var(--radius-sm);
   border:1px solid var(--line); margin-bottom:12px;
 }
-.color-card .color-top{display:grid; grid-template-columns:1fr 120px auto; gap:14px; align-items:end; margin-bottom:14px;}
+.color-card .color-top{display:grid; grid-template-columns:1fr 150px; gap:14px; align-items:end; margin-bottom:14px;}
 .size-row{display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; margin-bottom:10px;}
 .size-row select, .size-row input{
   padding:9px 12px; min-height:40px; border:1px solid var(--line-strong);
@@ -727,9 +727,6 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
   gap:10px; margin-bottom:14px;
 }
 .color-card .cc-title{font-size:13.5px; font-weight:700; color:var(--ink-soft);}
-.color-card input[type="color"]{
-  padding:3px; height:42px; cursor:pointer; background:var(--surface);
-}
 
 /* صناديق المراحل — تنطوي لحد ما تتفعّل */
 .dept-stage-box .stage-head{
@@ -866,6 +863,27 @@ table.att-grid td.stat.e{color:var(--ink);}
   .att-pair .ci, .att-pair .co{width:40px; font-size:9.5px;}
   .att-legend .hintx{margin-inline-start:0; width:100%;}
 }
+/* ===== صورة الموديل ===== */
+.nm-img-row{display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;}
+.nm-img-box{
+  width:120px; height:120px; flex-shrink:0;
+  border:1px dashed var(--line-strong); border-radius:var(--radius-sm);
+  background:var(--surface-2); overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+}
+.nm-img-box img{width:100%; height:100%; object-fit:cover;}
+.nm-img-box .ph{font-size:12px; color:var(--ink-faint);}
+.nm-img-side{display:flex; flex-direction:column; gap:8px; align-items:flex-start; flex:1; min-width:190px;}
+
+.model-card .mc-img{height:150px; background:var(--surface-3); overflow:hidden;}
+.model-card .mc-img img{width:100%; height:100%; object-fit:cover; display:block;}
+
+.md-img{
+  width:74px; height:74px; flex-shrink:0; border-radius:var(--radius-sm);
+  overflow:hidden; border:1px solid var(--line); background:var(--surface-2);
+}
+.md-img img{width:100%; height:100%; object-fit:cover; display:block;}
+
 /* ===== شاشات متوسطة: الشريط الجانبي يضيق ===== */
 @media (max-width:1180px){
   :root{--sidebar:200px;}
@@ -1013,6 +1031,9 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAfDjhoR6ufEfjQQ4ZFQe3oCUNSl4sqXec",
@@ -1049,6 +1070,13 @@ window._fscol = collection; window._fsgetdocs = getDocs;
 window._createUser = createUserWithEmailAndPassword;
 window._FACTORY_DOC_REF = FACTORY_DOC_REF;
 window._PERMISSION_SECTIONS = PERMISSION_SECTIONS;
+
+/* Firebase Storage — صور الموديلات */
+const storage = getStorage(fbApp);
+window._stRef = (path)=>storageRef(storage, path);
+window._stUpload = uploadBytes;
+window._stUrl = getDownloadURL;
+window._stDelete = deleteObject;
 
 window.currentUser = null;
 window.currentPermissions = null;
@@ -1317,6 +1345,9 @@ const EXTERNAL_STAGES = [
   {key:'tatreez', label:'تطريز/طباعة'},
   {key:'buttons', label:'أزرار'},
 ];
+/* درجات تلقائية للألوان — الدرجة اتشالت من النموذج، فبنوزّعها تلقائي عشان الشرايط تفضل مميزة */
+const AUTO_COLOR_HEX = ['#3D5A80','#157F5F','#A8700F','#B0453A','#6B4E9E','#0E7490','#9A6324','#4B5563'];
+
 const ALL_STAGES = [...INTERNAL_DEPTS.map(d=>({key:d.key,label:d.label,internal:true})), ...EXTERNAL_STAGES.map(s=>({key:s.key,label:s.label,internal:false}))];
 
 function toast(msg){
@@ -1756,6 +1787,7 @@ function renderModelGrid(){
         <h3>${escapeHtml(m.name)}</h3>
         ${canFinance ? `<div class="price">${fmt(m.sellPrice)} ج</div>` : ''}
       </div>
+      ${m.image ? `<div class="mc-img"><img src="${escapeHtml(m.image)}" alt="" loading="lazy"></div>` : ''}
       <div class="body">
         <div class="colors">
           ${m.colors.map(c=>`<span class="color-chip"><span class="swatch" style="background:${c.hex}"></span>${escapeHtml(c.name)}</span>`).join('')}
@@ -2364,6 +2396,7 @@ function collectNewModelDraft(){
       sizes
     });
   });
+  draft.image = window._nmImageUrl || '';
   ALL_STAGES.forEach(st=>{
     const en = document.getElementById('stage_'+st.key+'_enabled');
     if(!en) return;
@@ -2386,6 +2419,7 @@ function newModelDraftHasData(draft){
   if((draft.price||'').toString().trim()) return true;
   if((draft.expected||'').toString().trim()) return true;
   if((draft.payments||[]).length > 0) return true;
+  if((draft.image||'').trim()) return true;
   const anyColor = draft.colors.some(c=>
     (c.name||'').trim() || (c.bolts||'').toString().trim() ||
     c.sizes.some(s=>(s.qty||'').toString().trim())
@@ -2445,6 +2479,103 @@ async function closeAddModelModal(){
 /* ============================================================
    إضافة موديل جديد
 ============================================================ */
+/* ============================================================
+   صورة الموديل — ضغط في المتصفح ثم رفع على Firebase Storage
+============================================================ */
+window._nmImageUrl = '';
+
+/* يصغّر الصورة لـ600×600 كحد أقصى (مع الحفاظ على النسبة) ويرجّعها Blob */
+function shrinkImage(file, maxSide, quality){
+  maxSide = maxSide || 600;
+  quality = quality || 0.75;
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = ()=>reject(new Error('مقدرتش أقرا الملف'));
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=>reject(new Error('الملف ده مش صورة صالحة'));
+      img.onload = ()=>{
+        let {width:w, height:h} = img;
+        if(w > maxSide || h > maxSide){
+          const r = Math.min(maxSide/w, maxSide/h);
+          w = Math.round(w*r); h = Math.round(h*r);
+        }
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d');
+        /* خلفية بيضا عشان صور PNG الشفافة ما تطلعش سودا بعد التحويل لـJPEG */
+        ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
+        ctx.drawImage(img, 0, 0, w, h);
+        cv.toBlob(b=> b ? resolve(b) : reject(new Error('فشل الضغط')), 'image/jpeg', quality);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function nmPickImage(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const box  = document.getElementById('nmImgBox');
+  const hint = document.getElementById('nmImgHint');
+
+  if(!/^image\//.test(file.type)){
+    toast('الملف ده مش صورة');
+    input.value = '';
+    return;
+  }
+
+  if(hint) hint.textContent = 'بضغط الصورة…';
+  try{
+    const blob = await shrinkImage(file, 600, 0.75);
+    const kb = Math.round(blob.size/1024);
+
+    /* معاينة فورية قبل ما الرفع يخلص */
+    if(box) box.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="">`;
+    if(hint) hint.textContent = `بيرفع… (${kb} ك.ب بعد الضغط)`;
+
+    const name = `models/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+    const ref  = window._stRef(name);
+    await window._stUpload(ref, blob, { contentType:'image/jpeg' });
+    const url = await window._stUrl(ref);
+
+    window._nmImageUrl = url;
+    if(hint) hint.textContent = `✓ اترفعت — ${kb} ك.ب`;
+    const clr = document.getElementById('nmImgClear');
+    if(clr) clr.style.display = '';
+    saveNewModelDraft();
+  }catch(err){
+    console.error(err);
+    const msg = String(err && err.code || err && err.message || err);
+    if(/storage\/unauthorized|permission/i.test(msg)){
+      if(hint) hint.textContent = '❌ Storage رافض الرفع — راجع Storage Rules في Firebase.';
+      toast('الرفع مرفوض — راجع Storage Rules');
+    }else if(/storage\/unknown|retry-limit|network/i.test(msg)){
+      if(hint) hint.textContent = '❌ مشكلة اتصال — جرّب تاني.';
+      toast('مشكلة اتصال أثناء الرفع');
+    }else{
+      if(hint) hint.textContent = '❌ الرفع فشل — ' + msg;
+      toast('الرفع فشل');
+    }
+    nmClearImage(true);
+  }
+  input.value = '';
+}
+
+function nmClearImage(keepHint){
+  window._nmImageUrl = '';
+  const box = document.getElementById('nmImgBox');
+  if(box) box.innerHTML = `<span class="ph">مفيش صورة</span>`;
+  const clr = document.getElementById('nmImgClear');
+  if(clr) clr.style.display = 'none';
+  if(!keepHint){
+    const hint = document.getElementById('nmImgHint');
+    if(hint) hint.textContent = 'اختياري — بترفع أي صورة والنظام بيصغّرها لـ600×600 لوحده.';
+  }
+  saveNewModelDraft();
+}
+
 function openAddModelModal(){
   if(!requireEdit('models','إضافة موديل')) return;
   const html = `
@@ -2470,6 +2601,20 @@ function openAddModelModal(){
         <div class="field">
           <label>العدد المتوقع الإجمالي (قطعة)</label>
           <input type="number" id="nm_expected" placeholder="500">
+        </div>
+      </div>
+
+      <div class="section-divider">صورة الموديل</div>
+      <div class="nm-img-row">
+        <div class="nm-img-box" id="nmImgBox">
+          <span class="ph">مفيش صورة</span>
+        </div>
+        <div class="nm-img-side">
+          <input type="file" id="nm_image_file" accept="image/*" style="display:none;"
+                 onchange="nmPickImage(this)">
+          <button class="btn ghost small" type="button" onclick="document.getElementById('nm_image_file').click()">📷 اختار صورة</button>
+          <button class="btn ghost small" type="button" id="nmImgClear" style="display:none;" onclick="nmClearImage()">إزالة</button>
+          <div class="hint" id="nmImgHint">اختياري — بترفع أي صورة والنظام بيصغّرها لـ600×600 لوحده.</div>
         </div>
       </div>
 
@@ -2533,6 +2678,7 @@ function openAddModelModal(){
   window._newModelOpen = true;
   window._modelPayments = [];
   window._nmStep = 1;
+  window._nmImageUrl = '';
 
   /* استرجاع المسودة لو موجودة */
   const saved = getSavedDraft();
@@ -2753,6 +2899,15 @@ function restoreNewModelDraft(){
     if(c) c.value = s.cost || '';
   });
 
+  /* إعادة بناء الصورة */
+  window._nmImageUrl = d.image || '';
+  if(window._nmImageUrl){
+    const box = document.getElementById('nmImgBox');
+    if(box) box.innerHTML = `<img src="${escapeHtml(window._nmImageUrl)}" alt="">`;
+    const clr = document.getElementById('nmImgClear');
+    if(clr) clr.style.display = '';
+  }
+
   /* إعادة بناء الدفعات */
   window._modelPayments = (d.payments||[]).map(p=>({
     id: p.id || uid(), amount: p.amount || '', date: p.date || todayStr(), note: p.note || ''
@@ -2790,7 +2945,7 @@ function addColorRow(){
     </div>
     <div class="color-top">
       <div class="field"><label>اسم اللون</label><input type="text" id="cr_name_${idx}" placeholder="أبيض"></div>
-      <div class="field"><label>الدرجة</label><input type="color" id="cr_hex_${idx}" value="#cccccc"></div>
+      <input type="hidden" id="cr_hex_${idx}" value="${AUTO_COLOR_HEX[(idx-1) % AUTO_COLOR_HEX.length]}">
       <div class="field"><label>الأثواب المتوقعة</label><input type="number" id="cr_bolts_${idx}" placeholder="10"></div>
     </div>
     <div class="section-divider" style="margin:14px 0 10px;">المقاسات المتوقعة</div>
@@ -2900,6 +3055,7 @@ function saveNewModel(){
 
   const model = {
     id: uid(), name, sellPrice:price, expectedTotal:expected,
+    image: window._nmImageUrl || '',
     colors, stagesPlanned, cutParts:[], stageLogs, stageWorkers, sewingOps:[],
     payments, createdAt: Date.now()
   };
@@ -2987,11 +3143,14 @@ function renderModelDetail(){
   document.getElementById('view-detail').innerHTML = `
     <div class="back-btn" onclick="backToModels()">→ رجوع للموديلات</div>
     <div class="model-detail-header">
-      <div>
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        ${m.image ? `<div class="md-img"><img src="${escapeHtml(m.image)}" alt=""></div>` : ''}
+        <div>
         <h2>${escapeHtml(m.name)}</h2>
-        <div style="font-size:12px; color:#8a8070; margin-top:4px;">
+        <div style="font-size:12px; color:var(--ink-faint); margin-top:4px;">
           استلام: ${fmt(receivedTotal)}/${fmt(expectedBoltsTotal)} ثوب &nbsp;•&nbsp;
           قص: ${fmt(getTotalCutQty(m))}/${fmt(m.expectedTotal)} قطعة
+        </div>
         </div>
       </div>
       ${canFinance ? `<div class="price-tag">${fmt(m.sellPrice)} ج / قطعة</div>` : ''}
