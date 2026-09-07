@@ -747,6 +747,125 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
 .dept-stage-box:has(.stage-head input:not(:checked)) .stage-fields{display:none;}
 .dept-stage-box:has(.stage-head input:not(:checked)){opacity:.62;}
 .dept-stage-box:has(.stage-head input:checked){opacity:1; box-shadow:var(--shadow-sm);}
+/* ===== كشف الحضور الشهري (مصفوفة عمال × أيام) ===== */
+.att-legend{
+  display:flex; gap:14px; flex-wrap:wrap; align-items:center;
+  margin-bottom:16px; font-size:12.5px; color:var(--ink-soft);
+}
+.att-legend .lg{display:flex; align-items:center; gap:6px;}
+.att-legend .lg i{
+  width:22px; height:22px; border-radius:5px; display:flex;
+  align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; font-style:normal;
+}
+.att-legend .lg i.p{background:var(--ok-soft); color:var(--ok); border:1px solid #CDE6DB;}
+.att-legend .lg i.a{background:var(--warn-soft); color:var(--warn); border:1px solid #EFD7D3;}
+.att-legend .lg i.f{background:var(--indigo-soft); color:var(--indigo); border:1px solid #D5DFEB;}
+.att-legend .lg i.n{background:var(--surface-2); color:var(--ink-faint); border:1px dashed var(--line-strong);}
+.att-legend .hintx{margin-inline-start:auto; font-size:12px; color:var(--ink-faint);}
+
+.att-grid-wrap{
+  overflow-x:auto; border:1px solid var(--line);
+  border-radius:var(--radius); background:var(--surface);
+}
+table.att-grid{
+  width:max-content; min-width:100%;
+  border-collapse:separate; border-spacing:0; font-size:13px;
+}
+table.att-grid th, table.att-grid td{border-bottom:1px solid var(--line);}
+
+/* عمود الاسم — ثابت أثناء التمرير */
+table.att-grid .emp-col{
+  position:sticky; right:0; z-index:2;
+  background:var(--surface); text-align:right;
+  padding:8px 14px; min-width:150px; white-space:nowrap;
+  border-inline-end:1px solid var(--line-strong);
+}
+table.att-grid thead .emp-col{z-index:3; background:var(--surface-2);}
+table.att-grid tbody tr:nth-child(even) .emp-col{background:var(--surface-2);}
+table.att-grid .emp-col .en{font-weight:700; font-size:14px; color:var(--ink);}
+table.att-grid .emp-col .ed{font-size:11.5px; color:var(--ink-faint); font-weight:500;}
+
+/* رؤوس الأيام */
+table.att-grid th.day{
+  background:var(--surface-2); color:var(--ink-soft);
+  padding:7px 4px; min-width:50px; text-align:center;
+  border-bottom:2px solid var(--line-strong);
+  border-inline-start:1px solid var(--line);
+  font-weight:700; line-height:1.3;
+}
+table.att-grid th.day .dn{font-family:var(--mono); font-size:13px;}
+table.att-grid th.day .dw{font-size:10px; color:var(--ink-faint); font-weight:600;}
+table.att-grid th.day.fri{background:var(--indigo-soft); color:var(--indigo);}
+table.att-grid th.day.fri .dw{color:var(--indigo);}
+table.att-grid th.day.today{background:var(--indigo); color:#fff;}
+table.att-grid th.day.today .dw{color:rgba(255,255,255,.75);}
+table.att-grid th.day.sel{box-shadow:inset 0 -3px 0 var(--indigo);}
+
+table.att-grid th.stat{
+  background:var(--surface-2); color:var(--ink-soft);
+  padding:7px 10px; text-align:center; font-size:11.5px; font-weight:700;
+  border-bottom:2px solid var(--line-strong);
+  border-inline-start:1px solid var(--line-strong); white-space:nowrap;
+}
+table.att-grid tbody tr:nth-child(even) td{background:var(--surface-2);}
+table.att-grid tbody tr:hover td{background:var(--indigo-soft);}
+table.att-grid tbody tr:hover .emp-col{background:var(--indigo-soft);}
+
+/* خلايا الأيام */
+table.att-grid td.att-cell{
+  padding:2px 3px; text-align:center; vertical-align:middle;
+  border-inline-start:1px solid var(--line); cursor:pointer;
+  transition:background .12s;
+}
+table.att-grid td.att-cell.fri-col{background:#F7F9FC;}
+table.att-grid td.att-cell.future{cursor:default; opacity:.4;}
+table.att-grid td.att-cell.ro{cursor:default;}
+.att-mark{
+  height:36px; display:flex; align-items:center; justify-content:center;
+  border-radius:6px; font-weight:700; font-size:14px;
+}
+.att-mark.empty{color:var(--ink-faint); border:1px dashed var(--line-strong); font-size:12px;}
+.att-mark.absent{background:var(--warn-soft); color:var(--warn);}
+.att-mark.friday{background:var(--indigo-soft); color:var(--indigo); font-size:12px;}
+.att-mark.future{color:var(--ink-faint);}
+
+.att-pair{display:flex; flex-direction:column; gap:1px; padding:2px 0;}
+.att-pair .ci, .att-pair .co{
+  font-family:var(--mono); font-variant-numeric:tabular-nums;
+  font-size:10.5px; font-weight:700; padding:3px 0; width:46px; margin:0 auto;
+  line-height:1.25;
+}
+.att-pair .ci{background:var(--ok-soft); color:var(--ok); border-radius:5px 5px 0 0;}
+.att-pair .co{background:var(--indigo-soft); color:var(--indigo); border-radius:0 0 5px 5px;}
+.att-pair .co.none{background:transparent; color:var(--ink-faint); border:1px dashed var(--line-strong); border-radius:0 0 5px 5px;}
+
+table.att-grid td.stat{
+  text-align:center; font-weight:700; padding:6px 10px;
+  font-family:var(--mono); font-variant-numeric:tabular-nums;
+  border-inline-start:1px solid var(--line-strong);
+}
+table.att-grid td.stat.p{color:var(--ok);}
+table.att-grid td.stat.a{color:var(--warn);}
+table.att-grid td.stat.e{color:var(--ink);}
+
+.att-toolbar{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:14px; flex-wrap:wrap; margin-bottom:16px;
+}
+.att-pill{
+  background:var(--surface-2); border:1px solid var(--line);
+  border-radius:999px; padding:6px 15px; font-size:12.5px; color:var(--ink-soft);
+}
+.att-pill.now{background:var(--ok-soft); border-color:#CDE6DB; color:var(--ok); font-weight:700;}
+
+@media (max-width:760px){
+  table.att-grid .emp-col{min-width:112px; padding:7px 10px;}
+  table.att-grid .emp-col .en{font-size:13px;}
+  table.att-grid th.day{min-width:44px;}
+  .att-pair .ci, .att-pair .co{width:40px; font-size:9.5px;}
+  .att-legend .hintx{margin-inline-start:0; width:100%;}
+}
 /* ===== شاشات متوسطة: الشريط الجانبي يضيق ===== */
 @media (max-width:1180px){
   :root{--sidebar:200px;}
@@ -3688,42 +3807,163 @@ function renderAttendanceView(){
   }
   const y = window._attendanceYear, m = window._attendanceMonth;
   window._attendanceMonthKey = monthKey(y,m);
+  const totalDays = daysInMonth(y,m);
   if(!window._attendanceDayKey){
-    window._attendanceDayKey = dayKey(y,m, Math.min(now.getDate(), daysInMonth(y,m)));
+    window._attendanceDayKey = dayKey(y,m, Math.min(now.getDate(), totalDays));
   }
 
-  const totalDays = daysInMonth(y,m);
   const canEdit = hasPerm('attendance','edit');
+  const mk = monthKey(y,m);
+  const monthData = state.attendance[mk] || {};
+  const employees = state.factory.employees || [];
+  const isCurrentMonth = (y===now.getFullYear() && m===now.getMonth());
+  const todayNum = now.getDate();
+  const WD = ['أح','إث','ث','أر','خ','ج','س'];
+  const days = Array.from({length: totalDays}, (_,i)=>i+1);
+
+  const grid = employees.length===0
+    ? `<div class="empty-state"><div class="icon">👥</div><p>مفيش موظفين مسجلين في إعدادات المصنع لسه.</p></div>`
+    : `
+    <div class="att-grid-wrap">
+      <table class="att-grid">
+        <thead>
+          <tr>
+            <th class="emp-col">الموظف</th>
+            ${days.map(d=>{
+              const dk = dayKey(y,m,d);
+              const dow = new Date(y,m,d).getDay();
+              const cls = [ 'day',
+                (isCurrentMonth && d===todayNum) ? 'today' : '',
+                dow===5 ? 'fri' : '',
+                dk===window._attendanceDayKey ? 'sel' : ''
+              ].filter(Boolean).join(' ');
+              return `<th class="${cls}" onclick="selectAttendanceDay('${dk}')" title="افتح تفاصيل يوم ${d}">
+                <div class="dn">${d}</div><div class="dw">${WD[dow]}</div>
+              </th>`;
+            }).join('')}
+            <th class="stat">حضر</th>
+            <th class="stat">غاب</th>
+            <th class="stat">محسوب</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${employees.map(emp=>{
+            let nPresent=0, nAbsent=0, nFriday=0;
+            const cells = days.map(d=>{
+              const dk = dayKey(y,m,d);
+              const dow = new Date(y,m,d).getDay();
+              const rec = (monthData[dk]||{})[emp.id] || {};
+              const isFuture = isCurrentMonth && d>todayNum;
+              const friCol = dow===5 ? ' fri-col' : '';
+
+              let inner, title;
+              if(rec.type==='friday'){
+                nFriday++;
+                inner = `<div class="att-mark friday">🕌 ج</div>`;
+                title = 'جمعة مدفوعة';
+              } else if(rec.status==='present'){
+                nPresent++;
+                const ci = rec.checkIn || '—';
+                const co = rec.checkOut || '';
+                inner = `<div class="att-pair">
+                  <div class="ci">▲ ${escapeHtml(ci)}</div>
+                  <div class="co ${co?'':'none'}">${co ? '▼ '+escapeHtml(co) : '▼ …'}</div>
+                </div>`;
+                title = `حاضر — ${rec.checkIn||'?'} ◀ ${rec.checkOut||'?'}`;
+              } else if(rec.status==='absent'){
+                nAbsent++;
+                inner = `<div class="att-mark absent">غ</div>`;
+                title = 'غايب';
+              } else if(isFuture){
+                inner = `<div class="att-mark future">—</div>`;
+                title = 'يوم لسه ما جاش';
+              } else {
+                inner = `<div class="att-mark empty">✕</div>`;
+                title = canEdit ? 'اضغط لتسجيل حضور' : 'مش مسجّل';
+              }
+
+              const clickable = canEdit && !isFuture;
+              const cls = `att-cell${friCol}${isFuture?' future':''}${clickable?'':' ro'}`;
+              const onclick = clickable ? ` onclick="cycleAttendanceCell('${emp.id}','${dk}')"` : '';
+              return `<td class="${cls}"${onclick} title="${escapeHtml(title)}">${inner}</td>`;
+            }).join('');
+
+            const effective = nPresent + nFriday;
+            return `<tr>
+              <td class="emp-col">
+                <div class="en">${escapeHtml(emp.name)}</div>
+                ${emp.dept ? `<div class="ed">${escapeHtml(deptLabel(emp.dept))}</div>` : ''}
+              </td>
+              ${cells}
+              <td class="stat p">${nPresent}</td>
+              <td class="stat a">${nAbsent}</td>
+              <td class="stat e">${effective}/30</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
 
   el.innerHTML = `
     <div class="panel">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
-        <h2 style="margin:0;"><span class="title-txt">🕒 الحضور والانصراف</span></h2>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <button class="icon-btn" onclick="shiftAttendanceMonth(-1)">◀</button>
-          <strong style="min-width:110px; text-align:center;">${ARABIC_MONTHS[m]} ${y}</strong>
-          <button class="icon-btn" onclick="shiftAttendanceMonth(1)">▶</button>
+      <div class="att-toolbar">
+        <h2 style="margin:0; border:none; padding:0;"><span class="title-txt">🕒 كشف الحضور الشهري</span></h2>
+        <div class="month-nav">
+          <button onclick="shiftAttendanceMonth(-1)" title="الشهر السابق">◀</button>
+          <span class="mlabel">${ARABIC_MONTHS[m]} ${y}</span>
+          <button onclick="shiftAttendanceMonth(1)" title="الشهر التالي">▶</button>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <span class="att-pill">${totalDays} يوم — الشهر المالي 30 يوم ثابت</span>
+          ${isCurrentMonth ? `<span class="att-pill now">● الشهر الحالي</span>` : ''}
         </div>
       </div>
 
-      <div class="attendance-days-scroll">
-        ${Array.from({length: totalDays}, (_,i)=>i+1).map(d=>{
-          const dk = dayKey(y,m,d);
-          const active = dk===window._attendanceDayKey;
-          const dayData = (state.attendance[monthKey(y,m)]||{})[dk] || {};
-          const presentCount = Object.values(dayData).filter(v=>v.status==='present').length;
-          const absentCount = Object.values(dayData).filter(v=>v.status==='absent').length;
-          return `<button class="attendance-day-btn ${active?'active':''}" onclick="selectAttendanceDay('${dk}')">
-            <span class="d-num">${d}</span>
-            ${(presentCount||absentCount) ? `<span class="d-mark">${presentCount?`✅${presentCount}`:''}${absentCount?` ❌${absentCount}`:''}</span>` : ''}
-          </button>`;
-        }).join('')}
+      <div class="att-legend">
+        <span class="lg"><i class="p">▲</i> حاضر (دخول/خروج)</span>
+        <span class="lg"><i class="a">غ</i> غايب</span>
+        <span class="lg"><i class="f">ج</i> جمعة مدفوعة</span>
+        <span class="lg"><i class="n">✕</i> مش مسجّل</span>
+        <span class="hintx">${canEdit
+          ? 'اضغط على الخانة تلف: فاضي ← حاضر ← غايب ← جمعة ← فاضي · واضغط على رقم اليوم فوق عشان تظبط المواعيد بالتفصيل تحت'
+          : 'عرض فقط — التعديل محتاج صلاحية'}</span>
       </div>
+
+      ${grid}
     </div>
 
     <div class="panel" id="attendanceDayPanel"></div>
   `;
   renderAttendanceDayPanel();
+}
+
+/* دورة حالة الخانة في الكشف الشهري: فاضي ← حاضر ← غايب ← جمعة ← فاضي */
+function cycleAttendanceCell(empId, dk){
+  if(!requireEdit('attendance','تسجيل الحضور')) return;
+  const mk = dk.slice(0,7);
+  if(!state.attendance[mk]) state.attendance[mk] = {};
+  if(!state.attendance[mk][dk]) state.attendance[mk][dk] = {};
+  if(!state.attendance[mk][dk][empId]){
+    state.attendance[mk][dk][empId] = {
+      status:null, checkIn:'', checkOut:'',
+      otHours:0, latePen:0, earlyPen:0, absPenalty:null, type:null
+    };
+  }
+  const rec = state.attendance[mk][dk][empId];
+
+  if(rec.type === 'friday'){
+    rec.type = null; rec.status = null; rec.checkIn=''; rec.checkOut='';
+  } else if(rec.status === 'present'){
+    rec.status = 'absent'; rec.type = null; rec.checkIn=''; rec.checkOut='';
+  } else if(rec.status === 'absent'){
+    rec.status = 'present'; rec.type = 'friday'; rec.checkIn=''; rec.checkOut='';
+  } else {
+    rec.status = 'present'; rec.type = null;
+  }
+
+  window._attendanceDayKey = dk;
+  saveState();
+  renderAttendanceView();
 }
 
 function shiftAttendanceMonth(delta){
