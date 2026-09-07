@@ -1031,9 +1031,6 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import {
-  getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAfDjhoR6ufEfjQQ4ZFQe3oCUNSl4sqXec",
@@ -1071,12 +1068,8 @@ window._createUser = createUserWithEmailAndPassword;
 window._FACTORY_DOC_REF = FACTORY_DOC_REF;
 window._PERMISSION_SECTIONS = PERMISSION_SECTIONS;
 
-/* Firebase Storage — صور الموديلات */
-const storage = getStorage(fbApp);
-window._stRef = (path)=>storageRef(storage, path);
-window._stUpload = uploadBytes;
-window._stUrl = getDownloadURL;
-window._stDelete = deleteObject;
+/* مرجع وثيقة صورة موديل — مجموعة منفصلة عشان ما تاكلش من سقف وثيقة الحالة */
+window._IMG_DOC_REF = (imgId)=>doc(db, 'model_images', imgId);
 
 window.currentUser = null;
 window.currentPermissions = null;
@@ -1787,7 +1780,7 @@ function renderModelGrid(){
         <h3>${escapeHtml(m.name)}</h3>
         ${canFinance ? `<div class="price">${fmt(m.sellPrice)} ج</div>` : ''}
       </div>
-      ${m.image ? `<div class="mc-img"><img src="${escapeHtml(m.image)}" alt="" loading="lazy"></div>` : ''}
+      ${m.imageId ? `<div class="mc-img"><img data-img="${escapeHtml(m.imageId)}" alt=""></div>` : ''}
       <div class="body">
         <div class="colors">
           ${m.colors.map(c=>`<span class="color-chip"><span class="swatch" style="background:${c.hex}"></span>${escapeHtml(c.name)}</span>`).join('')}
@@ -1803,6 +1796,7 @@ function renderModelGrid(){
       </div>
     </div>`;
   }).join('');
+  hydrateModelImages();
 }
 
 function getTotalCutQty(m){
@@ -2396,7 +2390,7 @@ function collectNewModelDraft(){
       sizes
     });
   });
-  draft.image = window._nmImageUrl || '';
+  draft.imageId = window._nmImageId || '';
   ALL_STAGES.forEach(st=>{
     const en = document.getElementById('stage_'+st.key+'_enabled');
     if(!en) return;
@@ -2419,7 +2413,7 @@ function newModelDraftHasData(draft){
   if((draft.price||'').toString().trim()) return true;
   if((draft.expected||'').toString().trim()) return true;
   if((draft.payments||[]).length > 0) return true;
-  if((draft.image||'').trim()) return true;
+  if((draft.imageId||'').trim()) return true;
   const anyColor = draft.colors.some(c=>
     (c.name||'').trim() || (c.bolts||'').toString().trim() ||
     c.sizes.some(s=>(s.qty||'').toString().trim())
@@ -2480,14 +2474,21 @@ async function closeAddModelModal(){
    إضافة موديل جديد
 ============================================================ */
 /* ============================================================
-   صورة الموديل — ضغط في المتصفح ثم رفع على Firebase Storage
+   صور الموديلات — ضغط في المتصفح + وثيقة Firestore منفصلة لكل صورة
+   ملاحظة: Cloud Storage بيحتاج خطة Blaze، فبنستخدم مجموعة model_images.
+   كل صورة وثيقة لوحدها → سقف الـ1 ميجا بيتحسب لكل صورة، مش على الحالة كلها.
 ============================================================ */
-window._nmImageUrl = '';
+window._nmImageId = '';
+window._imgMem = window._imgMem || {};   /* كاش في الذاكرة */
 
-/* يصغّر الصورة لـ600×600 كحد أقصى (مع الحفاظ على النسبة) ويرجّعها Blob */
-function shrinkImage(file, maxSide, quality){
-  maxSide = maxSide || 600;
-  quality = quality || 0.75;
+const IMG_MAX_SIDE = 400;
+const IMG_QUALITY  = 0.72;
+const IMG_CACHE_PREFIX = 'msn3_img_';
+
+/* يصغّر الصورة ويرجّعها dataURL جاهزة للتخزين */
+function shrinkImageToDataUrl(file, maxSide, quality){
+  maxSide = maxSide || IMG_MAX_SIDE;
+  quality = quality || IMG_QUALITY;
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
     reader.onerror = ()=>reject(new Error('مقدرتش أقرا الملف'));
@@ -2495,7 +2496,7 @@ function shrinkImage(file, maxSide, quality){
       const img = new Image();
       img.onerror = ()=>reject(new Error('الملف ده مش صورة صالحة'));
       img.onload = ()=>{
-        let {width:w, height:h} = img;
+        let w = img.width, h = img.height;
         if(w > maxSide || h > maxSide){
           const r = Math.min(maxSide/w, maxSide/h);
           w = Math.round(w*r); h = Math.round(h*r);
@@ -2503,15 +2504,67 @@ function shrinkImage(file, maxSide, quality){
         const cv = document.createElement('canvas');
         cv.width = w; cv.height = h;
         const ctx = cv.getContext('2d');
-        /* خلفية بيضا عشان صور PNG الشفافة ما تطلعش سودا بعد التحويل لـJPEG */
+        /* خلفية بيضا عشان PNG الشفاف ما يطلعش أسود بعد التحويل لـJPEG */
         ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
         ctx.drawImage(img, 0, 0, w, h);
-        cv.toBlob(b=> b ? resolve(b) : reject(new Error('فشل الضغط')), 'image/jpeg', quality);
+        resolve(cv.toDataURL('image/jpeg', quality));
       };
       img.src = reader.result;
     };
     reader.readAsDataURL(file);
   });
+}
+
+function imgCacheGet(imgId){
+  if(window._imgMem[imgId]) return window._imgMem[imgId];
+  try{
+    const v = localStorage.getItem(IMG_CACHE_PREFIX + imgId);
+    if(v){ window._imgMem[imgId] = v; return v; }
+  }catch(e){}
+  return null;
+}
+
+function imgCacheSet(imgId, dataUrl){
+  window._imgMem[imgId] = dataUrl;
+  try{
+    localStorage.setItem(IMG_CACHE_PREFIX + imgId, dataUrl);
+  }catch(e){
+    /* الكاش مليان — نفضّي أقدم الصور بدل ما نكسر الحفظ */
+    try{
+      Object.keys(localStorage)
+        .filter(k=>k.startsWith(IMG_CACHE_PREFIX))
+        .slice(0, 12)
+        .forEach(k=>localStorage.removeItem(k));
+      localStorage.setItem(IMG_CACHE_PREFIX + imgId, dataUrl);
+    }catch(e2){ /* مش مشكلة — الذاكرة كفاية للجلسة دي */ }
+  }
+}
+
+/* يجيب الصورة: كاش الأول، وبعدين Firestore */
+async function fetchModelImage(imgId){
+  if(!imgId) return null;
+  const cached = imgCacheGet(imgId);
+  if(cached) return cached;
+  try{
+    const snap = await window._fsget(window._IMG_DOC_REF(imgId));
+    if(!snap.exists()) return null;
+    const data = snap.data() && snap.data().data;
+    if(!data) return null;
+    imgCacheSet(imgId, data);
+    return data;
+  }catch(e){ console.error('fetchModelImage', e); return null; }
+}
+
+/* بيملا كل عناصر <img data-img="..."> الموجودة في الصفحة */
+async function hydrateModelImages(){
+  const nodes = document.querySelectorAll('img[data-img]:not([data-img-done])');
+  for(const el of nodes){
+    const id = el.getAttribute('data-img');
+    el.setAttribute('data-img-done','1');
+    const src = await fetchModelImage(id);
+    if(src) el.src = src;
+    else if(el.parentElement) el.parentElement.style.display = 'none';
+  }
 }
 
 async function nmPickImage(input){
@@ -2520,43 +2573,40 @@ async function nmPickImage(input){
   const box  = document.getElementById('nmImgBox');
   const hint = document.getElementById('nmImgHint');
 
-  if(!/^image\//.test(file.type)){
-    toast('الملف ده مش صورة');
-    input.value = '';
-    return;
-  }
+  if(!/^image\//.test(file.type)){ toast('الملف ده مش صورة'); input.value=''; return; }
 
   if(hint) hint.textContent = 'بضغط الصورة…';
   try{
-    const blob = await shrinkImage(file, 600, 0.75);
-    const kb = Math.round(blob.size/1024);
+    const dataUrl = await shrinkImageToDataUrl(file);
+    const kb = Math.round(dataUrl.length * 0.75 / 1024);
 
-    /* معاينة فورية قبل ما الرفع يخلص */
-    if(box) box.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="">`;
-    if(hint) hint.textContent = `بيرفع… (${kb} ك.ب بعد الضغط)`;
+    if(kb > 700){
+      if(hint) hint.textContent = '❌ الصورة كبيرة أوي حتى بعد الضغط — جرّب صورة أبسط.';
+      toast('الصورة كبيرة جداً');
+      return;
+    }
 
-    const name = `models/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
-    const ref  = window._stRef(name);
-    await window._stUpload(ref, blob, { contentType:'image/jpeg' });
-    const url = await window._stUrl(ref);
+    if(box) box.innerHTML = `<img src="${dataUrl}" alt="">`;
+    if(hint) hint.textContent = `بيحفظ… (${kb} ك.ب)`;
 
-    window._nmImageUrl = url;
-    if(hint) hint.textContent = `✓ اترفعت — ${kb} ك.ب`;
+    const imgId = 'img_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    await window._fsset(window._IMG_DOC_REF(imgId), { data: dataUrl, at: Date.now() });
+
+    imgCacheSet(imgId, dataUrl);
+    window._nmImageId = imgId;
+    if(hint) hint.textContent = `✓ اتحفظت — ${kb} ك.ب`;
     const clr = document.getElementById('nmImgClear');
     if(clr) clr.style.display = '';
     saveNewModelDraft();
   }catch(err){
     console.error(err);
-    const msg = String(err && err.code || err && err.message || err);
-    if(/storage\/unauthorized|permission/i.test(msg)){
-      if(hint) hint.textContent = '❌ Storage رافض الرفع — راجع Storage Rules في Firebase.';
-      toast('الرفع مرفوض — راجع Storage Rules');
-    }else if(/storage\/unknown|retry-limit|network/i.test(msg)){
-      if(hint) hint.textContent = '❌ مشكلة اتصال — جرّب تاني.';
-      toast('مشكلة اتصال أثناء الرفع');
+    const msg = String((err && err.code) || (err && err.message) || err);
+    if(/permission|insufficient/i.test(msg)){
+      if(hint) hint.textContent = '❌ Firestore رافض الحفظ — محتاج تضيف قاعدة لمجموعة model_images.';
+      toast('الحفظ مرفوض — راجع Firestore Rules');
     }else{
-      if(hint) hint.textContent = '❌ الرفع فشل — ' + msg;
-      toast('الرفع فشل');
+      if(hint) hint.textContent = '❌ الحفظ فشل — ' + msg;
+      toast('حفظ الصورة فشل');
     }
     nmClearImage(true);
   }
@@ -2564,14 +2614,14 @@ async function nmPickImage(input){
 }
 
 function nmClearImage(keepHint){
-  window._nmImageUrl = '';
+  window._nmImageId = '';
   const box = document.getElementById('nmImgBox');
   if(box) box.innerHTML = `<span class="ph">مفيش صورة</span>`;
   const clr = document.getElementById('nmImgClear');
   if(clr) clr.style.display = 'none';
   if(!keepHint){
     const hint = document.getElementById('nmImgHint');
-    if(hint) hint.textContent = 'اختياري — بترفع أي صورة والنظام بيصغّرها لـ600×600 لوحده.';
+    if(hint) hint.textContent = 'اختياري — بترفع أي صورة والنظام بيصغّرها لـ400×400 لوحده.';
   }
   saveNewModelDraft();
 }
@@ -2614,7 +2664,7 @@ function openAddModelModal(){
                  onchange="nmPickImage(this)">
           <button class="btn ghost small" type="button" onclick="document.getElementById('nm_image_file').click()">📷 اختار صورة</button>
           <button class="btn ghost small" type="button" id="nmImgClear" style="display:none;" onclick="nmClearImage()">إزالة</button>
-          <div class="hint" id="nmImgHint">اختياري — بترفع أي صورة والنظام بيصغّرها لـ600×600 لوحده.</div>
+          <div class="hint" id="nmImgHint">اختياري — بترفع أي صورة والنظام بيصغّرها لـ400×400 لوحده.</div>
         </div>
       </div>
 
@@ -2678,7 +2728,7 @@ function openAddModelModal(){
   window._newModelOpen = true;
   window._modelPayments = [];
   window._nmStep = 1;
-  window._nmImageUrl = '';
+  window._nmImageId = '';
 
   /* استرجاع المسودة لو موجودة */
   const saved = getSavedDraft();
@@ -2900,12 +2950,13 @@ function restoreNewModelDraft(){
   });
 
   /* إعادة بناء الصورة */
-  window._nmImageUrl = d.image || '';
-  if(window._nmImageUrl){
+  window._nmImageId = d.imageId || '';
+  if(window._nmImageId){
     const box = document.getElementById('nmImgBox');
-    if(box) box.innerHTML = `<img src="${escapeHtml(window._nmImageUrl)}" alt="">`;
+    if(box) box.innerHTML = `<img data-img="${escapeHtml(window._nmImageId)}" alt="">`;
     const clr = document.getElementById('nmImgClear');
     if(clr) clr.style.display = '';
+    hydrateModelImages();
   }
 
   /* إعادة بناء الدفعات */
@@ -3055,7 +3106,7 @@ function saveNewModel(){
 
   const model = {
     id: uid(), name, sellPrice:price, expectedTotal:expected,
-    image: window._nmImageUrl || '',
+    imageId: window._nmImageId || '',
     colors, stagesPlanned, cutParts:[], stageLogs, stageWorkers, sewingOps:[],
     payments, createdAt: Date.now()
   };
@@ -3144,7 +3195,7 @@ function renderModelDetail(){
     <div class="back-btn" onclick="backToModels()">→ رجوع للموديلات</div>
     <div class="model-detail-header">
       <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-        ${m.image ? `<div class="md-img"><img src="${escapeHtml(m.image)}" alt=""></div>` : ''}
+        ${m.imageId ? `<div class="md-img"><img data-img="${escapeHtml(m.imageId)}" alt=""></div>` : ''}
         <div>
         <h2>${escapeHtml(m.name)}</h2>
         <div style="font-size:12px; color:var(--ink-faint); margin-top:4px;">
@@ -3158,6 +3209,7 @@ function renderModelDetail(){
     ${tabsHtml}
     <div id="detailBody">${bodyHtml}</div>
   `;
+  hydrateModelImages();
 }
 
 function switchDetailTab(tab){ currentDetailTab = tab; renderModelDetail(); }
