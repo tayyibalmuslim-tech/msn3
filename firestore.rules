@@ -1,0 +1,130 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ===== ثوابت ودوال مساعدة ===== */
+
+    // الأدمن الأساسي — الحساب الوحيد اللي يقدر يعطي نفسه صلاحيات عند أول تسجيل
+    function rootAdminEmail() {
+      return 'mazen0000070@gmail.com';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return isSignedIn() && exists(myDocPath());
+    }
+
+    function myPerms() {
+      return get(myDocPath()).data.permissions;
+    }
+
+    // عنده صلاحية تعديل على قسم معيّن؟
+    function canEdit(section) {
+      return hasProfile() && myPerms()[section] == 'edit';
+    }
+
+    // عنده أي صلاحية (عرض أو تعديل) على قسم معيّن؟
+    function canView(section) {
+      return hasProfile() && (myPerms()[section] == 'view' || myPerms()[section] == 'edit');
+    }
+
+    // عنده تعديل على أي قسم؟ (لأن saveState بتكتب الوثيقة كلها)
+    function canEditAnything() {
+      return canEdit('models')     || canEdit('finance')  || canEdit('treasury') ||
+             canEdit('sales')      || canEdit('employees') ||
+             canEdit('attendance') || canEdit('factory_settings');
+    }
+
+    // عنده أي صلاحية عرض على أي قسم؟
+    function canViewAnything() {
+      return canView('models')     || canView('finance')  || canView('treasury') ||
+             canView('sales')      || canView('employees') ||
+             canView('attendance') || canView('factory_settings') || canView('users');
+    }
+
+    // شكل وثيقة المستخدم سليم؟
+    function validUserShape() {
+      return request.resource.data.keys().hasAll(['email', 'permissions'])
+             && request.resource.data.permissions is map;
+    }
+
+    // كل الصلاحيات في الوثيقة الجديدة = none؟ (حساب جديد يبدأ صفر)
+    function allPermsNone() {
+      return request.resource.data.permissions
+               .values()
+               .hasOnly(['none']);
+    }
+
+
+    /* ===== وثائق المستخدمين والصلاحيات ===== */
+
+    match /users/{userId} {
+
+      // تقرأ وثيقتك، أو مدير المستخدمين يقرأ الكل
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId || canEdit('users')
+      );
+
+      // إنشاء وثيقتك أنت فقط — وبصلاحيات صفر إجبارياً.
+      // الاستثناء الوحيد: الأدمن الأساسي بإيميل موثّق من التوكن نفسه.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && validUserShape()
+        && request.resource.data.email == request.auth.token.email
+        && (
+          allPermsNone()
+          || (request.auth.token.email == rootAdminEmail()
+              && request.auth.token.email_verified == true)
+        );
+
+      // تعديل الصلاحيات لمدير المستخدمين فقط — ومش على نفسه
+      allow update: if canEdit('users')
+        && request.auth.uid != userId
+        && validUserShape();
+
+      allow delete: if false;
+    }
+
+
+    /* ===== بيانات المصنع (وثيقة واحدة) ===== */
+
+    match /factory_data/main {
+      // القراءة تحتاج أي صلاحية عرض — مش مجرد إنك مسجّل
+      allow read: if canViewAnything();
+
+      // saveState بتكتب الوثيقة كلها، فأي صلاحية تعديل تسمح بالكتابة
+      allow write: if canEditAnything();
+    }
+
+
+    /* ===== صور الموديلات — وثيقة منفصلة لكل صورة ===== */
+
+    match /model_images/{imgId} {
+      allow read: if canViewAnything();
+
+      allow create: if canEdit('models')
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 900000
+        && request.resource.data.data.matches('data:image/.*');
+
+      // الصور ثابتة — كل رفعة معرّف جديد، فمفيش تعديل
+      allow update: if false;
+      allow delete: if canEdit('models');
+    }
+
+
+    /* ===== أي مسار تاني ممنوع ===== */
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
