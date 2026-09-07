@@ -662,6 +662,91 @@ table.data-table tfoot td{font-weight:700; background:var(--surface-2); border-t
   gap:10px; margin-bottom:14px; font-weight:700; font-size:14px;
 }
 
+/* ===== نموذج "موديل جديد" — نظام الخطوات ===== */
+.nm-steps{
+  display:flex; gap:4px; background:var(--surface-3);
+  padding:4px; border-radius:10px; margin-bottom:22px;
+}
+.nm-step-btn{
+  flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+  padding:10px 12px; min-height:42px; border:none; background:transparent;
+  border-radius:7px; font-family:inherit; font-size:13.5px; font-weight:600;
+  color:var(--ink-faint); cursor:pointer; transition:all .15s; white-space:nowrap;
+}
+.nm-step-btn:hover{background:var(--surface); color:var(--ink);}
+.nm-step-btn i{
+  width:21px; height:21px; border-radius:50%; flex-shrink:0;
+  background:var(--line-strong); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11.5px; font-weight:700; font-style:normal;
+  font-family:var(--mono); transition:background .15s;
+}
+.nm-step-btn.active{background:var(--surface); color:var(--indigo); box-shadow:var(--shadow-sm);}
+.nm-step-btn.active i{background:var(--indigo);}
+.nm-step-btn.done i{background:var(--ok);}
+
+.nm-step{display:none;}
+.nm-step.active{display:block; animation:fadeIn .18s ease;}
+
+.nm-note{
+  font-size:12.5px; color:var(--ink-soft); line-height:1.75;
+  background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--radius-sm); padding:12px 15px; margin-bottom:16px;
+}
+.nm-note strong{color:var(--ink);}
+
+.nm-tally{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  flex-wrap:wrap; margin-top:16px; padding:13px 16px;
+  background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--radius-sm); font-size:13.5px; color:var(--ink-soft);
+}
+.nm-tally b{font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--ink); font-size:15px;}
+.nm-tally.warn{background:var(--amber-soft); border-color:#EBDCBE; color:var(--amber);}
+.nm-tally.warn b{color:var(--amber);}
+.nm-tally.ok{background:var(--ok-soft); border-color:#CDE6DB; color:var(--ok);}
+.nm-tally.ok b{color:var(--ok);}
+
+.nm-foot{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  margin-top:24px; padding-top:18px; border-top:1px solid var(--line);
+}
+.nm-foot .nm-spacer{flex:1;}
+#draftBadge{font-size:12px; color:var(--ok); transition:opacity .3s;}
+
+.nm-draft-bar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  background:var(--amber-soft); border:1px solid #EBDCBE;
+  border-radius:var(--radius-sm); padding:13px 16px; margin-bottom:18px;
+}
+.nm-draft-bar span{font-size:13px; flex:1; min-width:190px; color:var(--ink-soft);}
+
+/* بطاقة اللون */
+.color-card .cc-head{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; margin-bottom:14px;
+}
+.color-card .cc-title{font-size:13.5px; font-weight:700; color:var(--ink-soft);}
+.color-card input[type="color"]{
+  padding:3px; height:42px; cursor:pointer; background:var(--surface);
+}
+
+/* صناديق المراحل — تنطوي لحد ما تتفعّل */
+.dept-stage-box .stage-head{
+  display:flex; align-items:center; gap:9px;
+  font-weight:700; font-size:13.5px; cursor:pointer;
+}
+.dept-stage-box .stage-head input[type="checkbox"]{
+  width:17px; height:17px; accent-color:var(--indigo); cursor:pointer; flex-shrink:0;
+}
+.dept-stage-box .stage-head .badge{margin-inline-start:auto;}
+.dept-stage-box .stage-fields{
+  display:grid; gap:12px; margin-top:14px;
+  padding-top:14px; border-top:1px dashed var(--line-strong);
+}
+.dept-stage-box:has(.stage-head input:not(:checked)) .stage-fields{display:none;}
+.dept-stage-box:has(.stage-head input:not(:checked)){opacity:.62;}
+.dept-stage-box:has(.stage-head input:checked){opacity:1; box-shadow:var(--shadow-sm);}
 /* ===== شاشات متوسطة: الشريط الجانبي يضيق ===== */
 @media (max-width:1180px){
   :root{--sidebar:200px;}
@@ -2246,58 +2331,81 @@ function openAddModelModal(){
   const html = `
     <button class="modal-close" onclick="closeAddModelModal()">✕</button>
     <h3>موديل جديد</h3>
-    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; font-size:12px;">
-      <span id="draftBadge" style="color:var(--ok, #2e7d32); opacity:.45; transition:opacity .3s;">💾 الحفظ التلقائي شغّال</span>
-      <span style="color:#8a8070;">— بياناتك بتتحفظ تلقائي، ومش هتضيع لو النافذة اتقفلت بالغلط.</span>
-    </div>
-    <div class="form-grid" style="margin-bottom:16px;">
-      <div class="field">
-        <label>اسم الموديل</label>
-        <input type="text" id="nm_name" placeholder="مثال: تيشرت صيفي دفعة يوليو">
-      </div>
-      <div class="field">
-        <label>سعر البيع للقطعة (ج)</label>
-        <input type="number" id="nm_price" placeholder="45">
-      </div>
-      <div class="field">
-        <label>العدد المتوقع الإجمالي (قطعة)</label>
-        <input type="number" id="nm_expected" placeholder="500">
-      </div>
+
+    <div class="nm-steps">
+      <button type="button" class="nm-step-btn active" id="nmStepBtn1" onclick="nmGoStep(1)"><i>1</i> بيانات الشغلانة</button>
+      <button type="button" class="nm-step-btn" id="nmStepBtn2" onclick="nmGoStep(2)"><i>2</i> الألوان والمقاسات</button>
+      <button type="button" class="nm-step-btn" id="nmStepBtn3" onclick="nmGoStep(3)"><i>3</i> المراحل</button>
     </div>
 
-    <div class="section-divider">الألوان والأثواب والمقاسات المتوقعة</div>
-    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">لكل لون: عدد الأثواب المتوقع، وتحتها تفصيل المقاسات المتوقعة (مقاس + عدد قطع) عشان تقارنها بعدين بالفعلي بعد القص.</p>
-    <div id="colorRows"></div>
-    <button class="btn ghost small" onclick="addColorRow()">+ إضافة لون</button>
-
-    <div class="section-divider">مراحل الموديل والوقت المتوقع</div>
-    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">حدد المراحل اللي الموديل ده هيدخلها. الأقسام الداخلية (مقص/خياطة/امباج) تكلفتها بتتحسب تلقائي من الوقت × تكلفة الساعة. المراحل الخارجية تكتب تكلفتها يدوي.<br><strong>"وحدات لكل قطعة":</strong> كام وحدة من المرحلة دي لازمة للقطعة الواحدة. مثال: سروال فيه 4 جيوب → اكتب 4. لو المرحلة بتتعمل مرة واحدة للقطعة، سيبها 1.</p>
-    <div class="form-grid">
-      ${ALL_STAGES.map(st=>`
-        <div class="dept-stage-box ${st.internal?'internal':'external'}">
-          <label style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:13px;">
-            <input type="checkbox" id="stage_${st.key}_enabled">
-            ${st.label}
-            <span class="badge ${st.internal?'internal':'external'}" style="margin-right:auto;">${st.internal?'داخلي':'خارجي'}</span>
-          </label>
-          <div style="margin-top:8px;">
-            <input type="number" id="stage_${st.key}_units" placeholder="وحدات لكل قطعة" value="1" min="0.1" step="0.1" style="margin-bottom:6px;">
-            <input type="number" id="stage_${st.key}_time" placeholder="الوقت المتوقع (ساعة)" style="margin-bottom:6px;">
-            ${st.internal ? `<div class="hint" id="stage_${st.key}_rate_hint">تكلفة الساعة: ${fmt(getDeptHourlyRate(st.key))} ج</div>` :
-              `<input type="number" id="stage_${st.key}_cost" placeholder="التكلفة المتوقعة الكلية (ج)">`}
-          </div>
+    <div class="nm-step active" id="nmStep1">
+      <div class="form-grid" style="margin-bottom:6px;">
+        <div class="field">
+          <label>اسم الموديل</label>
+          <input type="text" id="nm_name" placeholder="تيشرت صيفي دفعة يوليو">
         </div>
-      `).join('')}
+        <div class="field">
+          <label>سعر البيع للقطعة (ج)</label>
+          <input type="number" id="nm_price" placeholder="45">
+        </div>
+        <div class="field">
+          <label>العدد المتوقع الإجمالي (قطعة)</label>
+          <input type="number" id="nm_expected" placeholder="500">
+        </div>
+      </div>
+
+      <div class="section-divider">دفعات التشغيل من العميل</div>
+      <div class="nm-note">الفلوس اللي العميل بيدفعها مقدّم عشان تشغّل الشغلانة. سيبها فاضية لو مفيش مقدّم.</div>
+      <div id="paymentRows"></div>
+      <button class="btn ghost small" type="button" onclick="addPaymentRow()">+ إضافة دفعة</button>
     </div>
 
-    <div class="section-divider">دفعات التشغيل الواردة من العميل</div>
-    <p style="font-size:12px; color:#8a8070; margin-bottom:10px;">الفلوس اللي العميل بيدفعها مقدّم عشان تشغّل الشغلانة دي. سجّل كل دفعة بمبلغها وتاريخها — العدد والمبالغ بتختلف من شغلانة لأخرى.</p>
-    <div id="paymentRows"></div>
-    <button class="btn ghost small" type="button" onclick="addPaymentRow()">+ إضافة دفعة</button>
+    <div class="nm-step" id="nmStep2">
+      <div class="nm-note">لكل لون: عدد الأثواب المتوقع، وتفصيل المقاسات (مقاس + عدد قطع) — عشان تقارنها بعدين بالفعلي بعد القص.</div>
+      <div id="colorRows"></div>
+      <button class="btn ghost small" type="button" onclick="addColorRow()">+ إضافة لون</button>
+      <div class="nm-tally" id="nmTally"></div>
+    </div>
 
-    <div style="display:flex; gap:10px; margin-top:18px;">
-      <button class="btn brass" style="flex:1;" onclick="saveNewModel()">حفظ الموديل</button>
+    <div class="nm-step" id="nmStep3">
+      <div class="nm-note">
+        اختار المراحل اللي الموديل هيدخلها. الأقسام الداخلية تكلفتها بتتحسب تلقائي من الوقت × تكلفة الساعة، والخارجية بتكتب تكلفتها بنفسك.<br>
+        <strong>وحدات لكل قطعة:</strong> كام وحدة من المرحلة لازمة للقطعة الواحدة. سروال بـ4 جيوب → اكتب 4. لو المرحلة بتتعمل مرة واحدة، سيبها 1.
+      </div>
+      <div class="form-grid">
+        ${ALL_STAGES.map(st=>`
+          <div class="dept-stage-box ${st.internal?'internal':'external'}">
+            <label class="stage-head">
+              <input type="checkbox" id="stage_${st.key}_enabled" onchange="nmUpdateTally()">
+              ${st.label}
+              <span class="badge ${st.internal?'internal':'external'}">${st.internal?'داخلي':'خارجي'}</span>
+            </label>
+            <div class="stage-fields">
+              <div class="field">
+                <label>وحدات لكل قطعة</label>
+                <input type="number" id="stage_${st.key}_units" value="1" min="0.1" step="0.1">
+              </div>
+              <div class="field">
+                <label>الوقت المتوقع (ساعة)</label>
+                <input type="number" id="stage_${st.key}_time" placeholder="0">
+              </div>
+              ${st.internal
+                ? `<div class="hint" id="stage_${st.key}_rate_hint">تكلفة الساعة: ${fmt(getDeptHourlyRate(st.key))} ج</div>`
+                : `<div class="field"><label>التكلفة المتوقعة الكلية (ج)</label><input type="number" id="stage_${st.key}_cost" placeholder="0"></div>`}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="nm-tally" id="nmStageTally"></div>
+    </div>
+
+    <div class="nm-foot">
+      <span id="draftBadge" style="opacity:.45;">💾 الحفظ التلقائي شغّال</span>
+      <span class="nm-spacer"></span>
+      <button class="btn ghost" type="button" id="nmPrevBtn" onclick="nmGoStep(window._nmStep-1)" style="display:none;">← السابق</button>
       <button class="btn ghost" type="button" onclick="closeAddModelModal()">إلغاء</button>
+      <button class="btn brass" type="button" id="nmNextBtn" onclick="nmGoStep(window._nmStep+1)">التالي →</button>
+      <button class="btn brass" type="button" id="nmSaveBtn" onclick="nmSave()" style="display:none;">حفظ الموديل</button>
     </div>
   `;
   document.getElementById('modalContent').innerHTML = html;
@@ -2305,6 +2413,7 @@ function openAddModelModal(){
   window._colorRowCount = 0;
   window._newModelOpen = true;
   window._modelPayments = [];
+  window._nmStep = 1;
 
   /* استرجاع المسودة لو موجودة */
   const saved = getSavedDraft();
@@ -2313,18 +2422,106 @@ function openAddModelModal(){
     const timeTxt = when.toLocaleString('ar-EG', {day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit'});
     const bar = document.createElement('div');
     bar.id = 'draftRestoreBar';
-    bar.style.cssText = 'background:#fff7e6; border:1.5px solid #e0a800; border-radius:10px; padding:12px 14px; margin-bottom:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;';
+    bar.className = 'nm-draft-bar';
     bar.innerHTML = `
-      <span style="font-size:13px; flex:1; min-width:180px;">📄 فيه مسودة محفوظة من <strong>${escapeHtml(timeTxt)}</strong> — تحب تكمّل عليها؟</span>
+      <span>📄 فيه مسودة محفوظة من <strong>${escapeHtml(timeTxt)}</strong> — تحب تكمّل عليها؟</span>
       <button class="btn small brass" type="button" onclick="restoreNewModelDraft()">استرجاع المسودة</button>
       <button class="btn small ghost" type="button" onclick="discardNewModelDraft()">ابدأ من جديد</button>
     `;
     const content = document.getElementById('modalContent');
-    content.insertBefore(bar, content.querySelector('h3').nextSibling);
+    content.insertBefore(bar, content.querySelector('.nm-steps'));
   }
 
   addColorRow(); addColorRow();
+  nmGoStep(1);
   attachDraftListeners();
+}
+
+/* ---------- التنقل بين خطوات النموذج ---------- */
+function nmGoStep(n){
+  n = Math.min(3, Math.max(1, Number(n)||1));
+  window._nmStep = n;
+  for(let i=1; i<=3; i++){
+    const step = document.getElementById('nmStep'+i);
+    const btn  = document.getElementById('nmStepBtn'+i);
+    if(step) step.classList.toggle('active', i===n);
+    if(btn){
+      btn.classList.toggle('active', i===n);
+      btn.classList.toggle('done', i<n);
+    }
+  }
+  const prev = document.getElementById('nmPrevBtn');
+  const next = document.getElementById('nmNextBtn');
+  const save = document.getElementById('nmSaveBtn');
+  if(prev) prev.style.display = n>1 ? '' : 'none';
+  if(next) next.style.display = n<3 ? '' : 'none';
+  if(save) save.style.display = n===3 ? '' : 'none';
+  nmUpdateTally();
+  const modal = document.getElementById('modalContent');
+  if(modal) modal.scrollTop = 0;
+}
+
+/* ---------- عدّادات مساعدة: مقارنة المقاسات بالعدد المتوقع ---------- */
+function nmUpdateTally(){
+  const tally = document.getElementById('nmTally');
+  if(tally){
+    let total = 0;
+    document.querySelectorAll('#colorRows .color-card').forEach(card=>{
+      card.querySelectorAll('.size-row input[type="number"]').forEach(inp=>{ total += Number(inp.value)||0; });
+    });
+    const expEl = document.getElementById('nm_expected');
+    const expected = Number(expEl ? expEl.value : 0) || 0;
+    tally.className = 'nm-tally';
+    if(!expected){
+      tally.innerHTML = `<span>إجمالي القطع من المقاسات</span><b>${fmt(total)}</b>`;
+    }else if(total === expected){
+      tally.className = 'nm-tally ok';
+      tally.innerHTML = `<span>✓ المقاسات مطابقة للعدد المتوقع</span><b>${fmt(total)}</b>`;
+    }else{
+      const diff = total - expected;
+      tally.className = 'nm-tally warn';
+      tally.innerHTML = `<span>المقاسات ${fmt(total)} والمتوقع ${fmt(expected)} — فرق ${diff>0?'زيادة':'نقص'} ${fmt(Math.abs(diff))} قطعة</span><b>${fmt(total)}</b>`;
+    }
+  }
+
+  const st = document.getElementById('nmStageTally');
+  if(st){
+    const on = ALL_STAGES.filter(s=>{
+      const el = document.getElementById('stage_'+s.key+'_enabled');
+      return el && el.checked;
+    });
+    st.className = on.length ? 'nm-tally ok' : 'nm-tally warn';
+    st.innerHTML = on.length
+      ? `<span>المراحل المختارة: ${on.map(s=>escapeHtml(s.label)).join(' ← ')}</span><b>${on.length}</b>`
+      : `<span>لسه مختارتش أي مرحلة — لازم مرحلة واحدة على الأقل</span><b>0</b>`;
+  }
+}
+
+/* ---------- حفظ مع القفز للخطوة الناقصة ---------- */
+function nmSave(){
+  const name = (document.getElementById('nm_name').value||'').trim();
+  const price = Number(document.getElementById('nm_price').value);
+  const expected = Number(document.getElementById('nm_expected').value);
+
+  if(!name || !price || price<=0 || !expected || expected<=0){
+    nmGoStep(1);
+  }else{
+    const hasColor = [...document.querySelectorAll('#colorRows .color-card')].some(card=>{
+      const idx = card.id.split('_')[1];
+      const el = document.getElementById('cr_name_'+idx);
+      return el && el.value.trim();
+    });
+    if(!hasColor){
+      nmGoStep(2);
+    }else{
+      const hasStage = ALL_STAGES.some(s=>{
+        const el = document.getElementById('stage_'+s.key+'_enabled');
+        return el && el.checked;
+      });
+      if(!hasStage) nmGoStep(3);
+    }
+  }
+  saveNewModel();
 }
 
 /* ---------- دفعات التشغيل ---------- */
@@ -2467,16 +2664,17 @@ function addColorRow(){
   card.className = 'color-card';
   card.id = 'colorRow_'+idx;
   card.innerHTML = `
+    <div class="cc-head">
+      <span class="cc-title">لون رقم ${idx}</span>
+      <button class="icon-btn" type="button" title="حذف اللون"
+        onclick="document.getElementById('colorRow_${idx}').remove(); nmUpdateTally();">🗑</button>
+    </div>
     <div class="color-top">
       <div class="field"><label>اسم اللون</label><input type="text" id="cr_name_${idx}" placeholder="أبيض"></div>
-      <div class="field"><label>لون الدائرة</label><input type="color" id="cr_hex_${idx}" value="#cccccc" style="height:38px; padding:2px;"></div>
-      <button class="icon-btn" onclick="document.getElementById('colorRow_${idx}').remove()">🗑 حذف اللون</button>
+      <div class="field"><label>الدرجة</label><input type="color" id="cr_hex_${idx}" value="#cccccc"></div>
+      <div class="field"><label>الأثواب المتوقعة</label><input type="number" id="cr_bolts_${idx}" placeholder="10"></div>
     </div>
-    <div class="field" style="max-width:220px; margin-bottom:12px;">
-      <label>عدد الأثواب المتوقع (خامة)</label>
-      <input type="number" id="cr_bolts_${idx}" placeholder="10">
-    </div>
-    <div class="section-divider" style="margin:10px 0 8px; font-size:11px;">المقاسات المتوقعة لهذا اللون</div>
+    <div class="section-divider" style="margin:14px 0 10px;">المقاسات المتوقعة</div>
     <div id="sizeRows_${idx}"></div>
     <button class="btn ghost small" type="button" onclick="addSizeRowToColor(${idx})">+ إضافة مقاس</button>
     <div class="size-total" id="sizeTotal_${idx}">إجمالي القطع المتوقعة للون ده: 0</div>
@@ -2493,11 +2691,18 @@ function addSizeRowToColor(colorIdx){
   row.className = 'size-row';
   row.id = `sizeRow_${colorIdx}_${sIdx}`;
   row.innerHTML = `
-    <select id="size_sel_${colorIdx}_${sIdx}" onchange="updateColorSizeTotal(${colorIdx})">
-      ${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}
-    </select>
-    <input type="number" id="size_qty_${colorIdx}_${sIdx}" placeholder="عدد القطع" oninput="updateColorSizeTotal(${colorIdx})">
-    <button class="icon-btn" type="button" onclick="document.getElementById('sizeRow_${colorIdx}_${sIdx}').remove(); updateColorSizeTotal(${colorIdx})">🗑</button>
+    <div class="field">
+      <label>المقاس</label>
+      <select id="size_sel_${colorIdx}_${sIdx}" onchange="updateColorSizeTotal(${colorIdx})">
+        ${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field">
+      <label>عدد القطع</label>
+      <input type="number" id="size_qty_${colorIdx}_${sIdx}" placeholder="0" oninput="updateColorSizeTotal(${colorIdx})">
+    </div>
+    <button class="icon-btn" type="button" title="حذف المقاس"
+      onclick="document.getElementById('sizeRow_${colorIdx}_${sIdx}').remove(); updateColorSizeTotal(${colorIdx});">🗑</button>
   `;
   wrap.appendChild(row);
 }
@@ -2511,6 +2716,7 @@ function updateColorSizeTotal(colorIdx){
   });
   const totalEl = document.getElementById('sizeTotal_'+colorIdx);
   if(totalEl) totalEl.textContent = `إجمالي القطع المتوقعة للون ده: ${total}`;
+  if(typeof nmUpdateTally === 'function') nmUpdateTally();
 }
 
 function saveNewModel(){
