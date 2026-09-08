@@ -222,13 +222,42 @@ button.btn.full{width:100%;}
   padding:18px 20px; background:var(--surface-2); border-radius:var(--radius-sm);
   border:1px solid var(--line); margin-bottom:12px;
 }
-.color-card .color-top{display:grid; grid-template-columns:1fr 150px; gap:14px; align-items:end; margin-bottom:14px;}
-.size-row{display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; margin-bottom:10px;}
-.size-row select, .size-row input{
-  padding:9px 12px; min-height:40px; border:1px solid var(--line-strong);
-  border-radius:8px; font-size:14px; font-family:inherit; background:var(--surface); color:var(--ink);
+.color-card .color-top{display:grid; grid-template-columns:1.3fr 110px 110px; gap:12px; align-items:end; margin-bottom:14px;}
+.color-card.collapsed .cc-body{display:none;}
+.color-card .cc-summary{font-size:12.5px; color:var(--ink-faint); margin-inline-start:8px;}
+.color-card.collapsed .cc-head{margin-bottom:0;}
+.cc-caret{font-size:11px; color:var(--ink-faint); transition:transform .15s;}
+.color-card.collapsed .cc-caret{transform:rotate(-90deg);}
+
+/* أزرار المقاسات */
+.size-btns{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+.size-btn{
+  display:flex; flex-direction:column; align-items:stretch; min-width:58px;
+  border:1px solid var(--line-strong); border-radius:9px; overflow:hidden;
+  background:var(--surface); opacity:.5; transition:opacity .12s, border-color .12s;
 }
+.size-btn.on{opacity:1; border-color:var(--brass, #b08a4a);}
+.size-btn .sb-lbl{
+  border:0; background:transparent; cursor:pointer; padding:7px 10px;
+  font-family:inherit; font-size:13px; font-weight:700; color:var(--ink-soft);
+  border-bottom:1px solid var(--line);
+}
+.size-btn.on .sb-lbl{background:var(--brass, #b08a4a); color:#fff; border-bottom-color:transparent;}
+.size-btn .sb-qty{
+  display:block; text-align:center; padding:6px 4px; font-size:13px;
+  font-weight:700; color:var(--ink-faint);
+}
+.size-btn.on .sb-qty{color:var(--ink);}
+.size-btn input.sb-qty{
+  width:100%; border:0; border-top:1px solid var(--line); text-align:center;
+  font-family:inherit; font-size:13px; font-weight:700; padding:6px 2px;
+  background:var(--surface); color:var(--ink); min-height:32px;
+}
+.size-btn input.sb-qty:focus{outline:2px solid var(--brass, #b08a4a); outline-offset:-2px;}
+.cc-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;}
 .color-card .size-total{font-size:12.5px; color:var(--ink-faint); margin-top:6px;}
+.color-card .size-total.bad{color:#b4462f; font-weight:700;}
+.color-card .size-total.good{color:#2f7a4f; font-weight:700;}
 .swatch{
   width:20px; height:20px; border-radius:6px; border:1px solid var(--line-strong);
   display:inline-block; vertical-align:middle; margin-inline-end:7px;
@@ -924,7 +953,8 @@ table.att-grid td.stat.e{color:var(--ink);}
   .panel{padding:20px 18px;}
   .panel h2{font-size:15.5px; margin-bottom:16px;}
   .form-grid{grid-template-columns:1fr;}
-  .emp-row, .stage-row, .color-card .color-top, .size-row{grid-template-columns:1fr;}
+  .emp-row, .stage-row, .color-card .color-top{grid-template-columns:1fr;}
+  .size-btn{min-width:52px;}
   .model-grid{grid-template-columns:1fr; gap:14px;}
   .model-detail-header{padding:18px; gap:12px;}
   .model-detail-header h2{font-size:19px;}
@@ -1187,11 +1217,21 @@ function migrateState(){
   if(!Array.isArray(state.payments)) state.payments = [];
   state.models.forEach(m=>{
     if(!m.sewingOps) m.sewingOps = [];
+    /* ربط الموديل بعميل من قائمة العملاء — '' معناها بدون عميل */
+    if(m.customerId === undefined) m.customerId = '';
     /* دفعات التشغيل الواردة من العميل — الموديلات القديمة مالهاش، فنبدأها فاضية */
     if(!Array.isArray(m.payments)) m.payments = [];
     /* عدد وحدات المرحلة لكل قطعة نهائية — الافتراضي 1 (وحدة = قطعة) */
     (m.stagesPlanned||[]).forEach(sp=>{
       if(sp.unitsPerPiece === undefined || Number(sp.unitsPerPiece) <= 0) sp.unitsPerPiece = 1;
+      /* عدد القطع الداخلة للمرحلة — null معناها كل كمية الموديل */
+      if(sp.stageQty === undefined) sp.stageQty = null;
+      /* الخدمات الخارجية (تطريز/أزرار): بالقطعة — المستلم من العميل والمدفوع للمورد.
+         null معناها الموديل قديم ولسه بيستخدم expectedCost كمبلغ إجمالي. */
+      if(!sp.internal){
+        if(sp.extRevenuePerPiece === undefined) sp.extRevenuePerPiece = null;
+        if(sp.extCostPerPiece    === undefined) sp.extCostPerPiece    = null;
+      }
     });
     /* العمال ومعاييرهم لكل مرحلة: { stageKey: [{employeeId, standard, history[]}] } */
     if(!m.stageWorkers || typeof m.stageWorkers !== 'object') m.stageWorkers = {};
@@ -1777,7 +1817,7 @@ function renderModelGrid(){
 
     return `<div class="model-card" onclick="openModelDetail('${m.id}')">
       <div class="head">
-        <h3>${escapeHtml(m.name)}</h3>
+        <h3>${escapeHtml(m.name)}${(()=>{const cn=getModelCustomerName(m); return cn?`<div style="font-size:11.5px; font-weight:600; color:#8a8070; margin-top:3px;">👤 ${escapeHtml(cn)}</div>`:'';})()}</h3>
         ${canFinance ? `<div class="price">${fmt(m.sellPrice)} ج</div>` : ''}
       </div>
       ${m.imageId ? `<div class="mc-img"><img data-img="${escapeHtml(m.imageId)}" alt=""></div>` : ''}
@@ -1810,12 +1850,23 @@ function getTotalCutQty(m){
      - لو خارجية: التكلفة المتوقعة = اللي كتبها المستخدم يدوي
    لو فيه سجلات فعلية للمرحلة (stageLogs) بتحل محل التقدير في حساب التكلفة الكلية.
 ============================================================ */
+/* كمية المرحلة: stageQty لو متحددة، وإلا كمية الموديل كلها */
+function getStageQty(m, sp){
+  const q = sp.stageQty;
+  if(q === null || q === undefined || q === '') return Number(m.expectedTotal)||0;
+  return Math.max(Number(q)||0, 0);
+}
+
 function calcModelCost(m){
   const cutQty = getTotalCutQty(m);
   const baseUnit = cutQty > 0 ? cutQty : (m.expectedTotal || 0);
 
-  let totalCost = 0;
+  /* التصنيع = الأقسام الداخلية بس (مقص + خياطة + امبلاج).
+     الخدمات الخارجية (تطريز/أزرار) بتتحسب لوحدها لأنها تمريرة مش شغل مصنع. */
+  let mfgCost = 0;
+  let extCost = 0, extRevenue = 0;
   let stageDetails = [];
+  let extDetails = [];
 
   (m.stagesPlanned||[]).forEach(sp=>{
     const isInternal = INTERNAL_DEPTS.some(d=>d.key===sp.key);
@@ -1824,32 +1875,68 @@ function calcModelCost(m){
     const actualSum = logs.reduce((s,l)=>s+(Number(l.cost)||0),0);
     const actualTimeSum = logs.reduce((s,l)=>s+(Number(l.time)||0),0);
 
-    let plannedCost = 0;
-    let hourlyRate = null;
     if(isInternal){
-      hourlyRate = getDeptHourlyRate(sp.key);
-      plannedCost = hourlyRate * (Number(sp.expectedTime)||0);
-    } else {
-      plannedCost = Number(sp.expectedCost)||0;
+      const hourlyRate = getDeptHourlyRate(sp.key);
+      const plannedCost = hourlyRate * (Number(sp.expectedTime)||0);
+      const usedCost = hasLogs ? actualSum : plannedCost;
+      mfgCost += usedCost;
+      stageDetails.push({
+        key:sp.key, label:sp.label, internal:true,
+        expectedTime:sp.expectedTime, hourlyRate,
+        plannedCost, actualCost:actualSum, actualTime:actualTimeSum,
+        hasLogs, usedCost
+      });
+      return;
     }
 
+    /* ---- مرحلة خارجية ---- */
+    const qty = getStageQty(m, sp);
+    const hasPerPiece = sp.extCostPerPiece !== null && sp.extCostPerPiece !== undefined;
+    /* الموديلات القديمة: expectedCost مبلغ إجمالي — بنحافظ عليه زي ما هو */
+    const plannedCost = hasPerPiece
+      ? qty * (Number(sp.extCostPerPiece)||0)
+      : (Number(sp.expectedCost)||0);
     const usedCost = hasLogs ? actualSum : plannedCost;
-    totalCost += usedCost;
+    const rev = qty * (Number(sp.extRevenuePerPiece)||0);
 
+    extCost += usedCost;
+    extRevenue += rev;
+    extDetails.push({
+      key:sp.key, label:sp.label, qty,
+      revPerPiece: Number(sp.extRevenuePerPiece)||0,
+      costPerPiece: hasPerPiece ? (Number(sp.extCostPerPiece)||0) : (qty>0 ? plannedCost/qty : 0),
+      legacy: !hasPerPiece,
+      revenue: rev, cost: usedCost, net: rev - usedCost,
+      hasLogs, actualCost:actualSum
+    });
+    /* بنسيبها في stageDetails كمان عشان أي شاشة قديمة متكسرش */
     stageDetails.push({
-      key:sp.key, label:sp.label, internal:isInternal,
-      expectedTime:sp.expectedTime, hourlyRate,
+      key:sp.key, label:sp.label, internal:false,
+      expectedTime:sp.expectedTime, hourlyRate:null,
       plannedCost, actualCost:actualSum, actualTime:actualTimeSum,
       hasLogs, usedCost
     });
   });
 
-  const revenue = (m.expectedTotal||0) * (Number(m.sellPrice)||0);
-  const profit = revenue - totalCost;
-  const costPerUnit = baseUnit > 0 ? totalCost/baseUnit : 0;
-  const profitPerUnit = (Number(m.sellPrice)||0) - costPerUnit;
+  const expected = Number(m.expectedTotal)||0;
+  const sell = Number(m.sellPrice)||0;
 
-  return { revenue, totalCost, profit, costPerUnit, profitPerUnit, stageDetails };
+  /* إيراد التصنيع = أجر المصنع بس (مقص+خياطة+امبلاج) */
+  const mfgRevenue = expected * sell;
+  const mfgProfit  = mfgRevenue - mfgCost;
+  const extNet     = extRevenue - extCost;
+
+  const totalCost = mfgCost + extCost;
+  const revenue   = mfgRevenue + extRevenue;
+  const profit    = mfgProfit + extNet;
+
+  const costPerUnit = baseUnit > 0 ? mfgCost/baseUnit : 0;
+  const profitPerUnit = sell - costPerUnit;
+
+  return {
+    revenue, totalCost, profit, costPerUnit, profitPerUnit, stageDetails,
+    mfgRevenue, mfgCost, mfgProfit, extRevenue, extCost, extNet, extDetails
+  };
 }
 
 /* ============================================================
@@ -1944,12 +2031,12 @@ function suggestRevenue(modelId, deptKey, qty){
   if(!m || !qty) return 0;
   const planned = m.stagesPlanned || [];
   if(planned.length === 0) return 0;
-  const costs = planned.map(sp=>{
-    if(INTERNAL_DEPTS.some(d=>d.key===sp.key)) return getDeptHourlyRate(sp.key) * (Number(sp.expectedTime)||0);
-    return Number(sp.expectedCost)||0;
-  });
+  /* سعر البيع بقى أجر التصنيع بس، فالتوزيع على الأقسام الداخلية بس.
+     الخدمات الخارجية ليها إيرادها المستقل ومش بتاخد نصيب من أجر التصنيع. */
+  const internals = planned.filter(sp=>INTERNAL_DEPTS.some(d=>d.key===sp.key));
+  const costs = internals.map(sp=>getDeptHourlyRate(sp.key) * (Number(sp.expectedTime)||0));
   const total = costs.reduce((a,b)=>a+b, 0);
-  const idx = planned.findIndex(sp=>sp.key===deptKey);
+  const idx = internals.findIndex(sp=>sp.key===deptKey);
   if(idx < 0 || total <= 0) return 0;
   const shareRatio = costs[idx] / total;
   return (Number(m.sellPrice)||0) * qty * shareRatio;
@@ -2368,6 +2455,7 @@ function collectNewModelDraft(){
     name: document.getElementById('nm_name').value,
     price: document.getElementById('nm_price').value,
     expected: document.getElementById('nm_expected').value,
+    customerId: (document.getElementById('nm_customer')||{}).value || '',
     colors: [],
     stages: {},
     payments: (window._modelPayments||[]).slice()
@@ -2376,17 +2464,15 @@ function collectNewModelDraft(){
     const idx = card.id.split('_')[1];
     const nameEl = document.getElementById('cr_name_'+idx);
     if(!nameEl) return;
-    const sizes = [];
-    card.querySelectorAll(`#sizeRows_${idx} .size-row`).forEach(sRow=>{
-      sizes.push({
-        size: sRow.querySelector('select').value,
-        qty:  sRow.querySelector('input[type="number"]').value
-      });
-    });
+    const st = nmColorState(idx);
+    const sizes = st.active.map(sz=>({ size: sz, qty: String(Number(st.qty[sz])||0) }));
+    const cEl = document.getElementById('cr_count_'+idx);
     draft.colors.push({
       name:  nameEl.value,
       hex:   document.getElementById('cr_hex_'+idx).value,
       bolts: document.getElementById('cr_bolts_'+idx).value,
+      count: cEl ? cEl.value : '',
+      manual: !!st.manual,
       sizes
     });
   });
@@ -2395,10 +2481,12 @@ function collectNewModelDraft(){
     const en = document.getElementById('stage_'+st.key+'_enabled');
     if(!en) return;
     const costEl = document.getElementById('stage_'+st.key+'_cost');
-    const unitsEl = document.getElementById('stage_'+st.key+'_units');
+    const qtyEl = document.getElementById('stage_'+st.key+'_qty');
+    const revEl = document.getElementById('stage_'+st.key+'_rev');
     draft.stages[st.key] = {
       enabled: en.checked,
-      units: unitsEl ? unitsEl.value : '1',
+      qty: qtyEl ? qtyEl.value : '',
+      rev: revEl ? revEl.value : '',
       time: (document.getElementById('stage_'+st.key+'_time')||{}).value || '',
       cost: costEl ? costEl.value : ''
     };
@@ -2416,11 +2504,13 @@ function newModelDraftHasData(draft){
   if((draft.imageId||'').trim()) return true;
   const anyColor = draft.colors.some(c=>
     (c.name||'').trim() || (c.bolts||'').toString().trim() ||
-    c.sizes.some(s=>(s.qty||'').toString().trim())
+    (c.count||'').toString().trim() || (c.sizes||[]).length > 0
   );
   if(anyColor) return true;
   return Object.values(draft.stages||{}).some(s=>
-    s.enabled || (s.time||'').toString().trim() || (s.cost||'').toString().trim()
+    s.enabled || (s.time||'').toString().trim() ||
+    (s.cost||'').toString().trim() || (s.qty||'').toString().trim() ||
+    (s.rev||'').toString().trim()
   );
 }
 
@@ -2652,6 +2742,11 @@ function openAddModelModal(){
           <label>العدد المتوقع الإجمالي (قطعة)</label>
           <input type="number" id="nm_expected" placeholder="500">
         </div>
+        <div class="field">
+          <label>العميل</label>
+          <select id="nm_customer">${customerOptions('')}</select>
+          <div class="hint" style="margin-top:5px;">اختياري — تقدر تربطه أو تغيّره بعدين من صفحة الموديل.</div>
+        </div>
       </div>
 
       <div class="section-divider">صورة الموديل</div>
@@ -2677,14 +2772,16 @@ function openAddModelModal(){
     <div class="nm-step" id="nmStep2">
       <div class="nm-note">لكل لون: عدد الأثواب المتوقع، وتفصيل المقاسات (مقاس + عدد قطع) — عشان تقارنها بعدين بالفعلي بعد القص.</div>
       <div id="colorRows"></div>
-      <button class="btn ghost small" type="button" onclick="addColorRow()">+ إضافة لون</button>
+      <button class="btn ghost small" type="button" onclick="addColorRow(true)">+ إضافة لون</button>
       <div class="nm-tally" id="nmTally"></div>
     </div>
 
     <div class="nm-step" id="nmStep3">
       <div class="nm-note">
         اختار المراحل اللي الموديل هيدخلها. الأقسام الداخلية تكلفتها بتتحسب تلقائي من الوقت × تكلفة الساعة، والخارجية بتكتب تكلفتها بنفسك.<br>
-        <strong>وحدات لكل قطعة:</strong> كام وحدة من المرحلة لازمة للقطعة الواحدة. سروال بـ4 جيوب → اكتب 4. لو المرحلة بتتعمل مرة واحدة، سيبها 1.
+        <strong>عدد القطع:</strong> سيبها فاضية لو المرحلة على كل كمية الموديل. اكتب رقم بس لو المرحلة على جزء — مثلاً تطريز على 200 من 500.<br>
+        <strong>الخدمات الخارجية (تطريز/أزرار):</strong> دي تمريرة مش شغل مصنع — بتسجّل اللي بتستلمه واللي بتدفعه، والنظام بيفصلها عن ربح التصنيع.<br>
+        ⚠️ <strong>سعر القطعة في الخطوة 1 = أجر المصنع بس</strong> (مقص + خياطة + امبلاج). متحطش فيه التطريز أو الأزرار عشان متحسبهمش مرتين.
       </div>
       <div class="form-grid">
         ${ALL_STAGES.map(st=>`
@@ -2696,8 +2793,10 @@ function openAddModelModal(){
             </label>
             <div class="stage-fields">
               <div class="field">
-                <label>وحدات لكل قطعة</label>
-                <input type="number" id="stage_${st.key}_units" value="1" min="0.1" step="0.1">
+                <label>عدد القطع</label>
+                <input type="number" id="stage_${st.key}_qty" placeholder="كل الكمية" min="0"
+                  oninput="nmCheckStageQty('${st.key}')">
+                <div class="hint" id="stage_${st.key}_qty_warn" style="display:none; color:#b4462f; font-weight:700;"></div>
               </div>
               <div class="field">
                 <label>الوقت المتوقع (ساعة)</label>
@@ -2705,7 +2804,13 @@ function openAddModelModal(){
               </div>
               ${st.internal
                 ? `<div class="hint" id="stage_${st.key}_rate_hint">تكلفة الساعة: ${fmt(getDeptHourlyRate(st.key))} ج</div>`
-                : `<div class="field"><label>التكلفة المتوقعة الكلية (ج)</label><input type="number" id="stage_${st.key}_cost" placeholder="0"></div>`}
+                : `<div class="field"><label>بتستلم من العميل (ج/قطعة)</label>
+                     <input type="number" id="stage_${st.key}_rev" placeholder="0" min="0" step="0.25"
+                       oninput="nmExtNet('${st.key}')"></div>
+                   <div class="field"><label>بتدفع للمورد (ج/قطعة)</label>
+                     <input type="number" id="stage_${st.key}_cost" placeholder="0" min="0" step="0.25"
+                       oninput="nmExtNet('${st.key}')"></div>
+                   <div class="hint" id="stage_${st.key}_net"></div>`}
             </div>
           </div>
         `).join('')}
@@ -2776,13 +2881,48 @@ function nmGoStep(n){
   if(modal) modal.scrollTop = 0;
 }
 
+/* ---------- صافي الخدمة الخارجية بشكل حي تحت الخانتين ---------- */
+function nmExtNet(stageKey){
+  const el = document.getElementById('stage_'+stageKey+'_net');
+  if(!el) return;
+  const rev  = Number((document.getElementById('stage_'+stageKey+'_rev')||{}).value)||0;
+  const cost = Number((document.getElementById('stage_'+stageKey+'_cost')||{}).value)||0;
+  const qEl  = document.getElementById('stage_'+stageKey+'_qty');
+  const raw  = qEl ? String(qEl.value).trim() : '';
+  const expEl = document.getElementById('nm_expected');
+  const qty = raw === '' ? (Number(expEl?expEl.value:0)||0) : (Number(raw)||0);
+  if(!rev && !cost){ el.textContent = ''; el.style.color = ''; return; }
+  const net = (rev - cost) * qty;
+  el.style.color = net < 0 ? '#b4462f' : (net > 0 ? '#2f7a4f' : '');
+  el.textContent = `${fmt(qty)} قطعة × (${fmt(rev)} − ${fmt(cost)}) = ${fmt(net)} ج`
+    + (net < 0 ? ' ⚠️ بتدفع أكتر مما بتستلم' : (net === 0 ? ' (متعادلة)' : ''));
+}
+
+/* ---------- تحذير: عدد قطع المرحلة أكبر من إجمالي الموديل ---------- */
+function nmCheckStageQty(stageKey){
+  const el = document.getElementById('stage_'+stageKey+'_qty');
+  const warn = document.getElementById('stage_'+stageKey+'_qty_warn');
+  if(!el || !warn) return;
+  const raw = String(el.value).trim();
+  const expEl = document.getElementById('nm_expected');
+  const expected = Number(expEl ? expEl.value : 0) || 0;
+  const v = Number(raw)||0;
+  if(raw !== '' && expected > 0 && v > expected){
+    warn.style.display = '';
+    warn.textContent = `⚠️ ${fmt(v)} أكبر من إجمالي الموديل (${fmt(expected)}) — راجع الرقم.`;
+  }else{
+    warn.style.display = 'none';
+    warn.textContent = '';
+  }
+}
+
 /* ---------- عدّادات مساعدة: مقارنة المقاسات بالعدد المتوقع ---------- */
 function nmUpdateTally(){
   const tally = document.getElementById('nmTally');
   if(tally){
     let total = 0;
     document.querySelectorAll('#colorRows .color-card').forEach(card=>{
-      card.querySelectorAll('.size-row input[type="number"]').forEach(inp=>{ total += Number(inp.value)||0; });
+      total += nmSumColor(card.id.split('_')[1]);
     });
     const expEl = document.getElementById('nm_expected');
     const expected = Number(expEl ? expEl.value : 0) || 0;
@@ -2797,6 +2937,14 @@ function nmUpdateTally(){
       tally.className = 'nm-tally warn';
       tally.innerHTML = `<span>المقاسات ${fmt(total)} والمتوقع ${fmt(expected)} — فرق ${diff>0?'زيادة':'نقص'} ${fmt(Math.abs(diff))} قطعة</span><b>${fmt(total)}</b>`;
     }
+  }
+
+  /* نراجع تحذيرات عدد قطع المراحل مع أي تغيير */
+  if(typeof ALL_STAGES !== 'undefined'){
+    ALL_STAGES.forEach(x=>{
+      if(document.getElementById('stage_'+x.key+'_qty')) nmCheckStageQty(x.key);
+      if(document.getElementById('stage_'+x.key+'_net')) nmExtNet(x.key);
+    });
   }
 
   const st = document.getElementById('nmStageTally');
@@ -2911,28 +3059,30 @@ function restoreNewModelDraft(){
   document.getElementById('nm_name').value     = d.name || '';
   document.getElementById('nm_price').value    = d.price || '';
   document.getElementById('nm_expected').value = d.expected || '';
+  const custSel = document.getElementById('nm_customer');
+  if(custSel) custSel.value = d.customerId || '';
 
   /* إعادة بناء الألوان */
   document.getElementById('colorRows').innerHTML = '';
   window._colorRowCount = 0;
+  window._nmColorState = {};
   (d.colors||[]).forEach(c=>{
     addColorRow();
     const idx = window._colorRowCount;
     document.getElementById('cr_name_'+idx).value  = c.name || '';
     document.getElementById('cr_hex_'+idx).value   = c.hex || '#cccccc';
     document.getElementById('cr_bolts_'+idx).value = c.bolts || '';
-    document.getElementById('sizeRows_'+idx).innerHTML = '';
-    window['_sizeRowCount_'+idx] = 0;
-    (c.sizes||[]).forEach(s=>{
-      addSizeRowToColor(idx);
-      const sIdx = window['_sizeRowCount_'+idx];
-      const sel = document.getElementById(`size_sel_${idx}_${sIdx}`);
-      const qty = document.getElementById(`size_qty_${idx}_${sIdx}`);
-      if(sel) sel.value = s.size || sel.value;
-      if(qty) qty.value = s.qty || '';
-    });
-    if((c.sizes||[]).length===0) addSizeRowToColor(idx);
-    updateColorSizeTotal(idx);
+    const cEl = document.getElementById('cr_count_'+idx);
+    if(cEl) cEl.value = c.count || '';
+    const st = nmColorState(idx);
+    st.manual = !!c.manual;
+    st.active = nmSortSizes((c.sizes||[]).map(x=>x.size).filter(x=>SIZES.indexOf(x)!==-1));
+    st.qty = {};
+    (c.sizes||[]).forEach(x=>{ if(SIZES.indexOf(x.size)!==-1) st.qty[x.size] = Number(x.qty)||0; });
+    /* لو المسودة قديمة (من قبل التحديث) ومفيهاش count، نحسبه من مجموع المقاسات */
+    if(cEl && !cEl.value && st.active.length){ cEl.value = nmSumColor(idx); }
+    if(!st.manual) nmDistribute(idx);
+    nmRenderSizes(idx);
   });
   if((d.colors||[]).length===0){ addColorRow(); addColorRow(); }
 
@@ -2941,8 +3091,10 @@ function restoreNewModelDraft(){
     const s = d.stages[key];
     const en = document.getElementById('stage_'+key+'_enabled');
     if(en) en.checked = !!s.enabled;
-    const u = document.getElementById('stage_'+key+'_units');
-    if(u) u.value = (s.units === undefined || s.units === '') ? '1' : s.units;
+    const q = document.getElementById('stage_'+key+'_qty');
+    if(q) q.value = (s.qty === undefined || s.qty === null) ? '' : s.qty;
+    const rv = document.getElementById('stage_'+key+'_rev');
+    if(rv) rv.value = (s.rev === undefined || s.rev === null) ? '' : s.rev;
     const t = document.getElementById('stage_'+key+'_time');
     if(t) t.value = s.time || '';
     const c = document.getElementById('stage_'+key+'_cost');
@@ -2980,67 +3132,261 @@ async function discardNewModelDraft(){
   toast('تم مسح المسودة');
 }
 
-function addColorRow(){
+/* ============================================================
+   الألوان والمقاسات — أزرار مقاسات + تقسيم تلقائي بالتساوي
+   ------------------------------------------------------------
+   حالة كل لون محفوظة في window._nmColorState[idx]:
+     { active: ['S','M'], qty: {S:50, M:50}, manual: false }
+   - manual=false  → الأرقام محسوبة تلقائي من "عدد قطع اللون" ÷ المقاسات
+   - manual=true   → المستخدم دوس على "تعديل الكميات" والنظام بطّل يلمس أرقامه
+============================================================ */
+window._nmColorState = window._nmColorState || {};
+
+function nmColorState(idx){
+  if(!window._nmColorState[idx]) window._nmColorState[idx] = { active:[], qty:{}, manual:false };
+  return window._nmColorState[idx];
+}
+
+/* ترتيب المقاسات دايماً حسب SIZES مش حسب ترتيب الضغط */
+function nmSortSizes(arr){
+  return arr.slice().sort((a,b)=>SIZES.indexOf(a) - SIZES.indexOf(b));
+}
+
+/* التقسيم بالتساوي — الباقي يروح لأول المقاسات (مفيش كسور في القطع) */
+function nmDistribute(idx){
+  const st = nmColorState(idx);
+  if(st.manual) return;
+  const cEl = document.getElementById('cr_count_'+idx);
+  const total = Math.max(Number(cEl ? cEl.value : 0) || 0, 0);
+  const n = st.active.length;
+  st.qty = {};
+  if(n === 0) return;
+  const base = Math.floor(total / n);
+  const rem  = total - (base * n);
+  st.active.forEach((sz, i)=>{ st.qty[sz] = base + (i < rem ? 1 : 0); });
+}
+
+function nmSumColor(idx){
+  const st = nmColorState(idx);
+  return st.active.reduce((sum, sz)=> sum + (Number(st.qty[sz]) || 0), 0);
+}
+
+/* قائمة عملاء المصنع للاختيار منها — '' = بدون عميل */
+function customerOptions(selectedId){
+  const list = (state.customers||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+  const opts = list.map(c=>
+    `<option value="${c.id}" ${c.id===selectedId?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+  return `<option value="" ${!selectedId?'selected':''}>— بدون عميل —</option>` + opts;
+}
+
+/* اسم العميل المرتبط بالموديل */
+function getModelCustomerName(m){
+  if(!m || !m.customerId) return '';
+  const c = (state.customers||[]).find(x=>x.id===m.customerId);
+  return c ? c.name : '';
+}
+
+function addColorRow(collapseOthers){
+  /* لما نضيف لون جديد، نطوي اللي قبله عشان الصفحة ماتطولش */
+  if(collapseOthers){
+    document.querySelectorAll('#colorRows .color-card').forEach(c=>c.classList.add('collapsed'));
+    document.querySelectorAll('#colorRows .color-card').forEach(c=>{
+      const i = c.id.split('_')[1];
+      if(typeof nmRefreshColorHead === 'function') nmRefreshColorHead(i);
+    });
+  }
   window._colorRowCount = (window._colorRowCount||0) + 1;
   const idx = window._colorRowCount;
-  window['_sizeRowCount_'+idx] = 0;
+  window._nmColorState[idx] = { active:[], qty:{}, manual:false };
   const wrap = document.getElementById('colorRows');
   const card = document.createElement('div');
   card.className = 'color-card';
   card.id = 'colorRow_'+idx;
   card.innerHTML = `
-    <div class="cc-head">
-      <span class="cc-title">لون رقم ${idx}</span>
+    <div class="cc-head" onclick="nmToggleColorCard(${idx}, event)" style="cursor:pointer;">
+      <span class="cc-title">
+        <span class="cc-caret">▾</span>
+        <span class="swatch" style="background:${AUTO_COLOR_HEX[(idx-1) % AUTO_COLOR_HEX.length]}; margin-inline-start:6px;"></span>
+        <span id="cc_label_${idx}">لون رقم ${idx}</span>
+        <span class="cc-summary" id="cc_sum_${idx}"></span>
+      </span>
       <button class="icon-btn" type="button" title="حذف اللون"
-        onclick="document.getElementById('colorRow_${idx}').remove(); nmUpdateTally();">🗑</button>
+        onclick="event.stopPropagation(); nmRemoveColor(${idx});">🗑</button>
     </div>
-    <div class="color-top">
-      <div class="field"><label>اسم اللون</label><input type="text" id="cr_name_${idx}" placeholder="أبيض"></div>
-      <input type="hidden" id="cr_hex_${idx}" value="${AUTO_COLOR_HEX[(idx-1) % AUTO_COLOR_HEX.length]}">
-      <div class="field"><label>الأثواب المتوقعة</label><input type="number" id="cr_bolts_${idx}" placeholder="10"></div>
+    <div class="cc-body">
+      <div class="color-top">
+        <div class="field"><label>اسم اللون</label>
+          <input type="text" id="cr_name_${idx}" placeholder="أبيض" oninput="nmRefreshColorHead(${idx})"></div>
+        <input type="hidden" id="cr_hex_${idx}" value="${AUTO_COLOR_HEX[(idx-1) % AUTO_COLOR_HEX.length]}">
+        <div class="field"><label>عدد قطع اللون</label>
+          <input type="number" id="cr_count_${idx}" placeholder="0" min="0" oninput="nmColorCountChanged(${idx})"></div>
+        <div class="field"><label>الأثواب المتوقعة</label>
+          <input type="number" id="cr_bolts_${idx}" placeholder="10"></div>
+      </div>
+      <div class="section-divider" style="margin:14px 0 10px;">المقاسات المتوقعة</div>
+      <div class="hint" style="margin-bottom:9px;">دوس على المقاس عشان تفعّله — العدد بيتقسّم بالتساوي تلقائي.</div>
+      <div class="size-btns" id="sizeBtns_${idx}"></div>
+      <div class="cc-actions" id="ccActions_${idx}"></div>
+      <div class="size-total" id="sizeTotal_${idx}"></div>
     </div>
-    <div class="section-divider" style="margin:14px 0 10px;">المقاسات المتوقعة</div>
-    <div id="sizeRows_${idx}"></div>
-    <button class="btn ghost small" type="button" onclick="addSizeRowToColor(${idx})">+ إضافة مقاس</button>
-    <div class="size-total" id="sizeTotal_${idx}">إجمالي القطع المتوقعة للون ده: 0</div>
   `;
   wrap.appendChild(card);
-  addSizeRowToColor(idx);
+  nmRenderSizes(idx);
+  nmRefreshColorHead(idx);
 }
 
-function addSizeRowToColor(colorIdx){
-  window['_sizeRowCount_'+colorIdx] = (window['_sizeRowCount_'+colorIdx]||0) + 1;
-  const sIdx = window['_sizeRowCount_'+colorIdx];
-  const wrap = document.getElementById('sizeRows_'+colorIdx);
-  const row = document.createElement('div');
-  row.className = 'size-row';
-  row.id = `sizeRow_${colorIdx}_${sIdx}`;
-  row.innerHTML = `
-    <div class="field">
-      <label>المقاس</label>
-      <select id="size_sel_${colorIdx}_${sIdx}" onchange="updateColorSizeTotal(${colorIdx})">
-        ${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}
-      </select>
-    </div>
-    <div class="field">
-      <label>عدد القطع</label>
-      <input type="number" id="size_qty_${colorIdx}_${sIdx}" placeholder="0" oninput="updateColorSizeTotal(${colorIdx})">
-    </div>
-    <button class="icon-btn" type="button" title="حذف المقاس"
-      onclick="document.getElementById('sizeRow_${colorIdx}_${sIdx}').remove(); updateColorSizeTotal(${colorIdx});">🗑</button>
-  `;
-  wrap.appendChild(row);
+function nmToggleColorCard(idx, ev){
+  const card = document.getElementById('colorRow_'+idx);
+  if(!card) return;
+  card.classList.toggle('collapsed');
+  nmRefreshColorHead(idx);
 }
 
+function nmRemoveColor(idx){
+  const card = document.getElementById('colorRow_'+idx);
+  if(card) card.remove();
+  delete window._nmColorState[idx];
+  nmUpdateTally();
+  saveNewModelDraft();
+}
+
+/* عنوان البطاقة المطوية: "أبيض · 100 قطعة · 4 مقاسات" */
+function nmRefreshColorHead(idx){
+  const st = nmColorState(idx);
+  const nameEl = document.getElementById('cr_name_'+idx);
+  const lbl = document.getElementById('cc_label_'+idx);
+  const sum = document.getElementById('cc_sum_'+idx);
+  if(lbl) lbl.textContent = (nameEl && nameEl.value.trim()) ? nameEl.value.trim() : ('لون رقم ' + idx);
+  if(sum){
+    const t = nmSumColor(idx);
+    sum.textContent = st.active.length
+      ? `· ${fmt(t)} قطعة · ${fmt(st.active.length)} مقاس`
+      : '· مفيش مقاسات لسه';
+  }
+}
+
+/* اتغيّر "عدد قطع اللون" */
+function nmColorCountChanged(idx){
+  const st = nmColorState(idx);
+  if(st.manual){
+    /* في وضع التعديل اليدوي مبنلمسش أرقامه — بس بنحدّث المقارنة */
+    nmRenderColorTotal(idx);
+    nmRefreshColorHead(idx);
+    nmUpdateTally();
+    return;
+  }
+  nmDistribute(idx);
+  nmRenderSizes(idx);
+}
+
+/* ضغط على زرار مقاس: تفعيل / إلغاء */
+async function nmToggleSize(idx, size){
+  const st = nmColorState(idx);
+  const on = st.active.indexOf(size) !== -1;
+  if(on){
+    /* لو فيه رقم متكتوب يدوي، نتأكد قبل ما نمسحه */
+    if(st.manual && (Number(st.qty[size])||0) > 0){
+      const ok = await confirmDialog(
+        `مقاس ${size} فيه ${fmt(st.qty[size])} قطعة. لو طفّيته الرقم ده هيتمسح.\n\nأطفّيه؟`,
+        { title:'إلغاء مقاس', yes:'أيوه طفّيه', no:'سيبه', danger:true });
+      if(!ok) return;
+    }
+    st.active = st.active.filter(x=>x!==size);
+    delete st.qty[size];
+  }else{
+    st.active = nmSortSizes(st.active.concat([size]));
+    if(st.manual) st.qty[size] = 0;   /* في اليدوي المقاس الجديد يبدأ صفر ومبنعيدش التقسيم */
+  }
+  nmDistribute(idx);
+  nmRenderSizes(idx);
+  saveNewModelDraft();
+}
+
+/* تبديل وضع التعديل اليدوي */
+async function nmToggleManual(idx){
+  const st = nmColorState(idx);
+  if(!st.manual){
+    if(st.active.length === 0){ toast('فعّل مقاس واحد على الأقل الأول'); return; }
+    st.manual = true;
+  }else{
+    const ok = await confirmDialog(
+      'هرجّع التقسيم بالتساوي — الأرقام اللي عدّلتها بإيدك هتتمسح.\n\nأكمّل؟',
+      { title:'رجوع للتقسيم التلقائي', yes:'أيوه رجّعه', no:'إلغاء', danger:true });
+    if(!ok) return;
+    st.manual = false;
+    nmDistribute(idx);
+  }
+  nmRenderSizes(idx);
+  saveNewModelDraft();
+}
+
+/* المستخدم كتب رقم في خانة مقاس (وضع يدوي بس) */
+function nmSizeQtyInput(idx, size, val){
+  const st = nmColorState(idx);
+  st.qty[size] = Math.max(Number(val)||0, 0);
+  nmRenderColorTotal(idx);
+  nmRefreshColorHead(idx);
+  nmUpdateTally();
+}
+
+/* رسم أزرار المقاسات + الأزرار المساعدة */
+function nmRenderSizes(idx){
+  const st = nmColorState(idx);
+  const wrap = document.getElementById('sizeBtns_'+idx);
+  if(!wrap) return;
+  wrap.innerHTML = SIZES.map(sz=>{
+    const on = st.active.indexOf(sz) !== -1;
+    const q  = on ? (Number(st.qty[sz])||0) : 0;
+    const qtyHtml = (on && st.manual)
+      ? `<input type="number" class="sb-qty" min="0" value="${q}"
+           onclick="event.stopPropagation();"
+           oninput="nmSizeQtyInput(${idx}, '${sz}', this.value)">`
+      : `<span class="sb-qty">${on ? fmt(q) : '·'}</span>`;
+    return `<div class="size-btn ${on?'on':''}">
+      <button type="button" class="sb-lbl" onclick="nmToggleSize(${idx}, '${sz}')">${sz}</button>
+      ${qtyHtml}
+    </div>`;
+  }).join('');
+
+  const act = document.getElementById('ccActions_'+idx);
+  if(act){
+    act.innerHTML = st.manual
+      ? `<button class="btn ghost small" type="button" onclick="nmToggleManual(${idx})">↺ رجّع التقسيم بالتساوي</button>
+         <span class="hint" style="margin:0;">وضع التعديل اليدوي شغّال — النظام مش هيلمس أرقامك.</span>`
+      : `<button class="btn ghost small" type="button" onclick="nmToggleManual(${idx})">✏️ تعديل الكميات</button>`;
+  }
+  nmRenderColorTotal(idx);
+  nmRefreshColorHead(idx);
+  nmUpdateTally();
+}
+
+/* سطر المقارنة تحت كل لون */
+function nmRenderColorTotal(idx){
+  const st = nmColorState(idx);
+  const el = document.getElementById('sizeTotal_'+idx);
+  if(!el) return;
+  const cEl = document.getElementById('cr_count_'+idx);
+  const target = Number(cEl ? cEl.value : 0) || 0;
+  const total = nmSumColor(idx);
+  el.className = 'size-total';
+  if(st.active.length === 0){
+    el.textContent = 'مختارتش مقاسات للون ده لسه.';
+  }else if(!target){
+    el.textContent = `الإجمالي: ${fmt(total)} قطعة`;
+  }else if(total === target){
+    el.className = 'size-total good';
+    el.textContent = `الإجمالي: ${fmt(total)} / ${fmt(target)} ✓`;
+  }else{
+    const d = total - target;
+    el.className = 'size-total bad';
+    el.textContent = `الإجمالي: ${fmt(total)} / ${fmt(target)} ⚠️ ${d>0?'زيادة':'ناقص'} ${fmt(Math.abs(d))}`;
+  }
+}
+
+/* متوافقة مع الكود القديم — أي نداء قديم يعيد الرسم بس */
 function updateColorSizeTotal(colorIdx){
-  const rows = document.querySelectorAll(`#sizeRows_${colorIdx} .size-row`);
-  let total = 0;
-  rows.forEach(row=>{
-    const qtyInput = row.querySelector('input[type="number"]');
-    total += Number(qtyInput.value)||0;
-  });
-  const totalEl = document.getElementById('sizeTotal_'+colorIdx);
-  if(totalEl) totalEl.textContent = `إجمالي القطع المتوقعة للون ده: ${total}`;
+  nmRenderColorTotal(colorIdx);
+  nmRefreshColorHead(colorIdx);
   if(typeof nmUpdateTally === 'function') nmUpdateTally();
 }
 
@@ -3063,14 +3409,11 @@ function saveNewModel(){
     const cbolts = Number(document.getElementById('cr_bolts_'+idx).value)||0;
     if(!cname) return;
 
+    const st = nmColorState(idx);
     const sizeBreakdown = [];
-    const sizeRows = card.querySelectorAll(`#sizeRows_${idx} .size-row`);
-    sizeRows.forEach(sRow=>{
-      const select = sRow.querySelector('select');
-      const qtyInput = sRow.querySelector('input[type="number"]');
-      const size = select.value;
-      const qty = Number(qtyInput.value)||0;
-      if(qty>0) sizeBreakdown.push({size, qty});
+    st.active.forEach(sz=>{
+      const qty = Number(st.qty[sz])||0;
+      if(qty>0) sizeBreakdown.push({size:sz, qty});
     });
 
     colors.push({id:uid(), name:cname, hex:chex, expectedBolts:cbolts, receivedBolts:0, sizeBreakdown});
@@ -3084,10 +3427,23 @@ function saveNewModel(){
     const enabled = document.getElementById('stage_'+st.key+'_enabled').checked;
     if(!enabled) return;
     const time = Number(document.getElementById('stage_'+st.key+'_time').value)||0;
-    const cost = st.internal ? null : (Number(document.getElementById('stage_'+st.key+'_cost').value)||0);
-    const unitsEl = document.getElementById('stage_'+st.key+'_units');
-    const units = Math.max(Number(unitsEl ? unitsEl.value : 1) || 1, 0.1);
-    stagesPlanned.push({key:st.key, label:st.label, internal:st.internal, expectedTime:time, expectedCost:cost, unitsPerPiece:units});
+    const costPP = st.internal ? null : (Number(document.getElementById('stage_'+st.key+'_cost').value)||0);
+    const revPP  = st.internal ? null : (Number((document.getElementById('stage_'+st.key+'_rev')||{}).value)||0);
+    const qtyEl = document.getElementById('stage_'+st.key+'_qty');
+    const rawQty = qtyEl ? String(qtyEl.value).trim() : '';
+    /* فاضي = كل كمية الموديل. رقم = المرحلة على جزء من الطلبية بس */
+    const stageQty = rawQty === '' ? null : Math.max(Number(rawQty)||0, 0);
+    stagesPlanned.push({
+      key:st.key, label:st.label, internal:st.internal,
+      expectedTime:time,
+      /* expectedCost اتساب للتوافق مع الموديلات القديمة — بيتحسب من سعر القطعة */
+      expectedCost: st.internal ? null : costPP * (stageQty === null ? (Number(expected)||0) : stageQty),
+      extCostPerPiece:    st.internal ? undefined : costPP,
+      extRevenuePerPiece: st.internal ? undefined : revPP,
+      stageQty: stageQty,
+      /* بيتضبط من شاشة "عمال المرحلة والمعايير" لما تقيس معيار فعلي */
+      unitsPerPiece: 1
+    });
     stageLogs[st.key] = [];
     stageWorkers[st.key] = [];
   });
@@ -3107,6 +3463,7 @@ function saveNewModel(){
   const model = {
     id: uid(), name, sellPrice:price, expectedTotal:expected,
     imageId: window._nmImageId || '',
+    customerId: (document.getElementById('nm_customer')||{}).value || '',
     colors, stagesPlanned, cutParts:[], stageLogs, stageWorkers, sewingOps:[],
     payments, createdAt: Date.now()
   };
@@ -3185,7 +3542,7 @@ function renderModelDetail(){
   let bodyHtml = '';
   if(currentDetailTab==='overview') bodyHtml = renderOverviewTab(m, cost);
   else if(currentDetailTab==='receiving') bodyHtml = renderReceivingTab(m);
-  else if(currentDetailTab==='cutting') bodyHtml = renderCuttingTab(m);
+  else if(currentDetailTab==='cutting'){ bodyHtml = renderCuttingTab(m); setTimeout(refreshCutSizes, 0); }
   else if(currentDetailTab==='workers') bodyHtml = renderWorkersTab(m);
   else if(currentDetailTab==='cost' && canFinance) bodyHtml = renderCostTab(m, cost);
   else if(currentDetailTab==='cost'){ currentDetailTab='overview'; bodyHtml = renderOverviewTab(m, cost); }
@@ -3217,9 +3574,21 @@ function switchDetailTab(tab){ currentDetailTab = tab; renderModelDetail(); }
 /* ---------- نظرة عامة ---------- */
 function renderOverviewTab(m, cost){
   const canFinance = hasPerm('finance','view');
+  const canEditModels = hasPerm('models','edit');
+  const custName = getModelCustomerName(m);
   return `
     <div class="panel">
-      <h2>ملخص الموديل</h2>
+      <h2><span class="title-txt">ملخص الموديل</span>
+        <span class="badge ${custName?'ok':'pending'}">${custName ? '👤 ' + escapeHtml(custName) : 'بدون عميل'}</span></h2>
+      ${canEditModels ? `
+      <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px;">
+        <div class="field" style="flex:1; min-width:200px; margin:0;">
+          <label>العميل</label>
+          <select id="modelCustomerSel">${customerOptions(m.customerId||'')}</select>
+        </div>
+        <button class="btn ghost small" onclick="updateModelCustomer()">حفظ العميل</button>
+      </div>
+      ${(state.customers||[]).length===0 ? `<div class="hint" style="margin-bottom:12px;">مفيش عملاء مسجّلين — ضيفهم من تبويب «العملاء والفواتير».</div>` : ''}` : ''}
       <div class="cost-summary">
         <div class="cost-item"><div class="lbl">العدد المتوقع</div><div class="val">${fmt(m.expectedTotal)}</div></div>
         ${canFinance ? `
@@ -3315,13 +3684,16 @@ function renderWorkersTab(m){
         </div>` : `
         <div style="font-size:13px; color:#8a8070; margin-bottom:14px;">لسه مفيش معايير مسجلة. قيس معيار عامل واحد على الأقل عشان تشوف الطاقة والاختناق.</div>`}
       <table class="data-table">
-        <thead><tr><th>المرحلة</th><th>وحدات/قطعة</th><th>عمال</th><th>الطاقة (وحدة/يوم)</th><th>الطاقة (قطعة/يوم)</th></tr></thead>
+        <thead><tr><th>المرحلة</th><th>عدد القطع</th><th>وحدات/قطعة</th><th>عمال</th><th>الطاقة (وحدة/يوم)</th><th>الطاقة (قطعة/يوم)</th></tr></thead>
         <tbody>
           ${stages.map(sp=>{
             const cap = getStageDailyCapacity(m, sp.key);
             const isBn = bottleneck && bottleneck.sp.key===sp.key;
             return `<tr${isBn?' style="background:#fff7e6;"':''}>
               <td><strong>${escapeHtml(sp.label)}</strong>${isBn?' 🚧':''}</td>
+              <td>${(sp.stageQty===null||sp.stageQty===undefined)
+                    ? `<span style="color:#8a8070;">كل الكمية${m.expectedTotal>0?' ('+fmt(m.expectedTotal)+')':''}</span>`
+                    : `<strong>${fmt(sp.stageQty)}</strong>`}</td>
               <td>×${fmt(sp.unitsPerPiece||1)}</td>
               <td>${cap.withStandard}/${cap.total} لهم معيار</td>
               <td>${cap.withStandard?fmt(Math.floor(cap.units)):'—'}</td>
@@ -3680,12 +4052,13 @@ function renderCuttingTab(m){
       <div class="form-grid">
         <div class="field">
           <label>اللون</label>
-          <select id="cut_color">${m.colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select>
+          <select id="cut_color" onchange="refreshCutSizes()">${m.colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select>
         </div>
         <div class="field"><label>الجزء</label><input type="text" id="cut_part" placeholder="مثال: ظهر، أمامي، كم"></div>
         <div class="field">
           <label>المقاس</label>
-          <select id="cut_size">${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+          <select id="cut_size">${cutSizeOptions(m, m.colors[0] ? m.colors[0].id : '')}</select>
+          <div class="hint" id="cut_size_hint" style="margin-top:5px;"></div>
         </div>
         <div class="field"><label>عدد القطع</label><input type="number" id="cut_qty" placeholder="50"></div>
       </div>
@@ -3712,11 +4085,48 @@ function renderCuttingTab(m){
   `;
 }
 
+/* مقاسات اللون بس — مش كل SIZES. مع عرض المتوقع والمقصوص لكل مقاس. */
+function cutSizeOptions(m, colorId){
+  const c = (m.colors||[]).find(x=>x.id===colorId);
+  const sb = (c && c.sizeBreakdown) || [];
+  if(sb.length === 0) return '<option value="">— اللون ده مالوش مقاسات —</option>';
+  return sb.map(r=>{
+    const done = (m.cutParts||[])
+      .filter(x=>x.colorId===colorId && x.size===r.size)
+      .reduce((s,x)=>s+(Number(x.qty)||0),0);
+    return `<option value="${r.size}">${r.size} — متوقع ${fmt(r.qty)}${done?` · مقصوص ${fmt(done)}`:''}</option>`;
+  }).join('');
+}
+
+function refreshCutSizes(){
+  const m = getCurrentModel(); if(!m) return;
+  const colorId = document.getElementById('cut_color').value;
+  const sel = document.getElementById('cut_size');
+  const hint = document.getElementById('cut_size_hint');
+  if(sel) sel.innerHTML = cutSizeOptions(m, colorId);
+  if(hint){
+    const c = (m.colors||[]).find(x=>x.id===colorId);
+    const n = ((c && c.sizeBreakdown) || []).length;
+    hint.textContent = n ? `${fmt(n)} مقاس متاح للون ده` : 'اللون ده مالوش مقاسات — عدّل الموديل وضيفها الأول.';
+    hint.style.color = n ? '' : '#b4462f';
+  }
+}
+
+function updateModelCustomer(){
+  if(!requireEdit('models','تغيير عميل الموديل')) return;
+  const m = getCurrentModel(); if(!m) return;
+  const sel = document.getElementById('modelCustomerSel'); if(!sel) return;
+  m.customerId = sel.value || '';
+  saveState(); renderModelDetail();
+  toast(m.customerId ? 'اترّبط بالعميل ✓' : 'اتشال ربط العميل ✓');
+}
+
 function addCutRow(){
   const colorId = document.getElementById('cut_color').value;
   const part = document.getElementById('cut_part').value.trim();
   const size = document.getElementById('cut_size').value;
   const qty = Number(document.getElementById('cut_qty').value);
+  if(!size){ toast('اللون ده مالوش مقاسات — عدّل الموديل وضيفها الأول'); return; }
   if(!part){ toast('اكتب اسم الجزء'); return; }
   if(!qty || qty<=0){ toast('اكتب عدد صحيح'); return; }
   const m = getCurrentModel();
@@ -3807,32 +4217,75 @@ function renderCostTab(m, cost){
   if(!hasPerm('finance','view')){
     return `<div class="locked-msg">🚫 مفيش صلاحية لعرض الحسابات المالية</div>`;
   }
+  const internals = cost.stageDetails.filter(d=>d.internal);
+  const ext = cost.extDetails || [];
   return `
     <div class="panel">
-      <h2>ملخص الربحية</h2>
+      <h2><span class="title-txt">🏭 شغل المصنع</span><span class="badge internal">مقص + خياطة + امبلاج</span></h2>
       <div class="cost-summary">
-        <div class="cost-item"><div class="lbl">الإيراد المتوقع الكلي</div><div class="val">${fmt(cost.revenue)} ج</div></div>
-        <div class="cost-item"><div class="lbl">التكلفة الكلية</div><div class="val">${fmt(cost.totalCost)} ج</div></div>
-        <div class="cost-item profit ${cost.profit<0?'negative':''}"><div class="lbl">صافي الربح المتوقع</div><div class="val">${fmt(cost.profit)} ج</div></div>
-        <div class="cost-item profit ${cost.profitPerUnit<0?'negative':''}"><div class="lbl">ربح القطعة الواحدة</div><div class="val">${fmt(cost.profitPerUnit)} ج</div></div>
+        <div class="cost-item"><div class="lbl">إيراد التصنيع</div><div class="val">${fmt(cost.mfgRevenue)} ج</div></div>
+        <div class="cost-item"><div class="lbl">تكلفة التصنيع</div><div class="val">${fmt(cost.mfgCost)} ج</div></div>
+        <div class="cost-item profit ${cost.mfgProfit<0?'negative':''}"><div class="lbl">ربح التصنيع</div><div class="val">${fmt(cost.mfgProfit)} ج</div></div>
+        <div class="cost-item profit ${cost.profitPerUnit<0?'negative':''}"><div class="lbl">ربح القطعة</div><div class="val">${fmt(cost.profitPerUnit)} ج</div></div>
+      </div>
+      <p style="font-size:11px; color:#8a8070; margin-top:10px;">
+        إيراد التصنيع = ${fmt(m.expectedTotal)} قطعة × ${fmt(m.sellPrice)} ج. ده الرقم اللي بيقيس شغل المصنع فعلاً.
+      </p>
+    </div>
+
+    ${ext.length===0 ? '' : `
+    <div class="panel">
+      <h2><span class="title-txt">🔗 الخدمات الخارجية</span><span class="badge external">تمريرة — مش شغل مصنع</span></h2>
+      <table class="data-table">
+        <thead><tr><th>الخدمة</th><th>القطع</th><th>بتستلم/قطعة</th><th>بتدفع/قطعة</th><th>المستلم</th><th>المدفوع</th><th>الصافي</th></tr></thead>
+        <tbody>
+          ${ext.map(d=>`<tr>
+            <td><strong>${escapeHtml(d.label)}</strong>${d.legacy?' <span class="badge pending" title="موديل قديم: التكلفة كانت مبلغ إجمالي">قديم</span>':''}
+              ${d.hasLogs?' <span class="badge ok">فعلي</span>':''}</td>
+            <td>${fmt(d.qty)}</td>
+            <td>${fmt(d.revPerPiece)} ج</td>
+            <td>${fmt(d.costPerPiece)} ج</td>
+            <td>${fmt(d.revenue)} ج</td>
+            <td>${fmt(d.cost)} ج</td>
+            <td style="color:${d.net<0?'#b4462f':(d.net>0?'#2f7a4f':'inherit')}; font-weight:700;">${fmt(d.net)} ج</td>
+          </tr>`).join('')}
+          <tr style="border-top:2px solid var(--line-strong); font-weight:800;">
+            <td colspan="4">الإجمالي</td>
+            <td>${fmt(cost.extRevenue)} ج</td>
+            <td>${fmt(cost.extCost)} ج</td>
+            <td style="color:${cost.extNet<0?'#b4462f':(cost.extNet>0?'#2f7a4f':'inherit')};">${fmt(cost.extNet)} ج</td>
+          </tr>
+        </tbody>
+      </table>
+      ${cost.extNet < 0 ? `<p style="font-size:12px; color:#b4462f; font-weight:700; margin-top:10px;">
+        ⚠️ بتدفع في الخدمات الخارجية أكتر مما بتستلم بـ ${fmt(Math.abs(cost.extNet))} ج — الفرق ده بيتاكل من ربح التصنيع.
+      </p>` : (cost.extNet === 0 ? `<p style="font-size:11px; color:#8a8070; margin-top:10px;">متعادلة — بتمرّرها للعميل بنفس التكلفة زي ما اتفقنا.</p>` : '')}
+    </div>`}
+
+    <div class="panel">
+      <h2>💰 الإجمالي</h2>
+      <div class="cost-breakdown">
+        <div class="line"><span>ربح التصنيع</span><span>${fmt(cost.mfgProfit)} ج</span></div>
+        <div class="line"><span>صافي الخدمات الخارجية</span><span>${fmt(cost.extNet)} ج</span></div>
+        <div class="line total"><span>صافي الربح المتوقع</span><span>${fmt(cost.profit)} ج</span></div>
       </div>
     </div>
 
     <div class="panel">
-      <h2>تفصيل التكلفة حسب المرحلة</h2>
+      <h2>تفصيل تكلفة التصنيع حسب المرحلة</h2>
       <div class="cost-breakdown">
-        ${cost.stageDetails.map(d=>`
+        ${internals.map(d=>`
           <div class="line">
             <span>
               ${d.label}
-              <span class="badge ${d.internal?'internal':'external'}">${d.internal?'داخلي':'خارجي'}</span>
+              <span class="badge internal">داخلي</span>
               ${d.hasLogs ? '<span class="badge ok">فعلي</span>' : '<span class="badge pending">تقديري</span>'}
-              ${d.internal ? ` <span style="font-size:11px; color:#8a8070;">(${fmt(d.expectedTime)} س × ${fmt(d.hourlyRate)} ج/س)</span>` : ''}
+              <span style="font-size:11px; color:#8a8070;">(${fmt(d.expectedTime)} س × ${fmt(d.hourlyRate)} ج/س)</span>
             </span>
             <span>${fmt(d.usedCost)} ج</span>
           </div>
         `).join('')}
-        <div class="line total"><span>إجمالي التكلفة</span><span>${fmt(cost.totalCost)} ج</span></div>
+        <div class="line total"><span>إجمالي تكلفة التصنيع</span><span>${fmt(cost.mfgCost)} ج</span></div>
       </div>
       <p style="font-size:11px; color:#8a8070; margin-top:12px;">
         ⚠️ ملاحظة: المراحل اللي لسه ما اتسجلش لها دفعات فعلية بتتحسب تقديرياً (الداخلية من تكلفة الساعة الحالية، الخارجية من السعر المتوقع اللي كتبته). التكلفة هتبقى أدق كل ما تسجل الدفعات الفعلية أول بأول، ولو غيرت الإيجار/الرواتب في الإعدادات، التقدير هيتحدث تلقائي للمراحل اللي لسه معملتش لها تسجيل فعلي.
@@ -5369,7 +5822,13 @@ function addCustomer(){
 
 async function deleteCustomer(id){
   if(!requireEdit('sales','حذف عميل')) return;
-  if(!await confirmDialog('هيتشال العميل وكل فواتيره ودفعاته المسجّلة.', {title:'حذف عميل', yes:'احذف', danger:true})) return;
+  const linked = (state.models||[]).filter(m=>m.customerId===id);
+  const extra = linked.length
+    ? `\n\n⚠️ فيه ${linked.length} موديل مرتبط بالعميل ده (${linked.map(m=>m.name).join('، ')}). الموديلات مش هتتحذف، بس هتفضل من غير عميل.`
+    : '';
+  if(!await confirmDialog('هيتشال العميل وكل فواتيره ودفعاته المسجّلة.' + extra, {title:'حذف عميل', yes:'احذف', danger:true})) return;
+  /* نفك الربط بدل ما نسيب مرجع لعميل مش موجود */
+  (state.models||[]).forEach(m=>{ if(m.customerId===id) m.customerId = ''; });
   state.customers = state.customers.filter(c=>c.id!==id);
   state.invoices = state.invoices.filter(i=>i.customerId!==id);
   state.payments = state.payments.filter(p=>p.customerId!==id);
